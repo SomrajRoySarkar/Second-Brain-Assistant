@@ -1,0 +1,14 @@
+# Ignore environment variable files
+.env
+
+# Ignore SQLite database
+second_brain.db
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# VSCode settings
+.vscode/
+knowledge_base.json

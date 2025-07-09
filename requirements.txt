@@ -1,0 +1,9 @@
+cohere==4.37
+python-dotenv==1.0.0
+colorama==0.4.6
+rich==13.7.0 
+requests==2.31.0 
+googletrans==4.0.0rc1 
+langdetect==1.0.9
+httpx==0.13.3
+httpcore==0.9.1
