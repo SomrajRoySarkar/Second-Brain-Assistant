@@ -70,8 +70,26 @@ Just type your questions or commands in the terminal. Here are some things you c
 
 - **Search your memories:**  
   ```
-  You: search python
+  You: memory search python
   Assistant: - Python is a high-level programming language...
+  ```
+
+- **Search the web with Google:**  
+  ```
+  You: /search What is quantum computing?
+  Assistant: [Google search results...]
+  ```
+
+- **Get a detailed explanation:**  
+  ```
+  You: /explain Photosynthesis
+  Assistant: [Detailed, well-structured explanation]
+  ```
+
+- **Get an explanation for specific marks or format:**  
+  ```
+  You: /explain Newton's Laws; for 5 marks; format: bullet points
+  Assistant: [Explanation tailored for 5 marks, in bullet points]
   ```
 
 - **See your recent memories:**  

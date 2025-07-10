@@ -62,11 +62,12 @@ class SecondBrainCLI:
         
         commands = [
             ("help", "Show this help message"),
-            ("search <query>", "Search through your memories"),
+            ("/search <query>", "Search Google for your query"),
             ("memories", "Show recent memories"),
             ("memory", "Show memory summary"),
             ("memory search <query>", "Search memories"),
             ("memory add <content>", "Add new memory"),
+            ("/explain <topic>[; for X marks][; format: ...]", "Get a detailed explanation of a topic, optionally for marks or in a specific format"),
             ("clear", "Clear the screen"),
             ("quit/exit", "Exit the application")
         ]
@@ -82,10 +83,10 @@ class SecondBrainCLI:
     # Removed: handle_task_commands, add_task_interactive, and all task-related CLI logic and help text
     
     def handle_search(self, command):
-        """Handle search commands"""
-        if command.startswith("search "):
-            query = command[7:]  # Remove "search " prefix
-            result = self.assistant.search_memories(query)
+        """Handle /search command for Google search only"""
+        if command.startswith("/search "):
+            query = command[len("/search "):].strip()
+            result = self.assistant.process_message(command)
             self.console.print(result)
             return True
         elif command == "memories":
@@ -93,13 +94,11 @@ class SecondBrainCLI:
             if not memories:
                 self.console.print("No memories found.")
                 return True
-            
             table = Table(title="Recent Memories")
             table.add_column("Content", style="cyan")
             table.add_column("Category", style="magenta")
             table.add_column("Importance", style="yellow")
             table.add_column("Date", style="green")
-            
             for memory in memories:
                 table.add_row(
                     memory[1][:50] + "..." if len(memory[1]) > 50 else memory[1],  # memory[1] is content
@@ -107,7 +106,6 @@ class SecondBrainCLI:
                     str(memory[3]),  # memory[3] is importance
                     memory[4][:10]  # memory[4] is timestamp, just the date part
                 )
-            
             self.console.print(table)
             return True
         return False

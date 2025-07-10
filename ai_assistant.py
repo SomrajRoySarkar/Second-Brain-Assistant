@@ -99,7 +99,50 @@ JSON Output:
             # If the API call or JSON parsing fails, return the original message as a single question.
             return [user_message]
     
+    def handle_explain_command(self, user_message):
+        """Handle /explain command: parse topic, optional marks, and format, then generate a detailed explanation."""
+        import re
+        # Remove '/explain' prefix
+        command = user_message[len('/explain'):].strip()
+        # Parse for 'for X marks' and 'format: ...'
+        marks = None
+        format_str = None
+        # Look for 'for X marks' (case-insensitive)
+        marks_match = re.search(r'for (\d+) ?marks?', command, re.IGNORECASE)
+        if marks_match:
+            marks = int(marks_match.group(1))
+            command = re.sub(r'for (\d+) ?marks?', '', command, flags=re.IGNORECASE).strip()
+        # Look for 'format: ...' (case-insensitive)
+        format_match = re.search(r'format:([^;]+)', command, re.IGNORECASE)
+        if format_match:
+            format_str = format_match.group(1).strip()
+            command = re.sub(r'format:[^;]+', '', command, flags=re.IGNORECASE).strip()
+        # Remove trailing semicolons and whitespace
+        topic = command.strip(' ;')
+        # Build prompt
+        prompt = f"You are an expert explainer. Provide a detailed, clear, and efficient explanation of the following topic: '{topic}'. "
+        if marks:
+            prompt += f"The explanation should be suitable for an answer worth {marks} marks. "
+        if format_str:
+            prompt += f"Format the answer as: {format_str}. "
+        else:
+            prompt += "Use a standard, well-structured format with headings, bullet points, and examples if relevant. "
+        prompt += "Do not add unnecessary filler or repetition. Be as smart and concise as possible, but cover all key points in detail."
+        try:
+            response = self.co.chat(
+                message=prompt,
+                model="command-r-plus",
+                temperature=0.7,
+                max_tokens=1000
+            )
+            return response.text.strip()
+        except Exception as e:
+            return f"I'm having trouble generating the explanation right now. Error: {str(e)}"
+
     def process_message(self, user_message, language_style='en'):
+        # Handle /explain command
+        if user_message.strip().lower().startswith('/explain'):
+            return self.handle_explain_command(user_message)
         return self._process_single_message(user_message, language_style=language_style)
 
     def needs_web_search(self, user_message):
