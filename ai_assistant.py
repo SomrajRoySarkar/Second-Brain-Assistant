@@ -179,17 +179,45 @@ JSON Output:
         except Exception as e:
             return f"Error fetching forecast: {str(e)}"
 
+    def is_time_or_date_query(self, user_message):
+        """
+        Uses the language model to determine if the user is asking for the current time or date.
+        Returns 'time', 'date', or 'none'.
+        """
+        prompt = f"""You are a text classification assistant. Your task is to determine if the user's message is a direct request for the current time or date.
+Respond with only one of these three words: 'time', 'date', or 'none'. Do not add any other text or punctuation.
+
+- If the user is asking for the current time, respond with 'time'.
+- If the user is asking for the current date, respond with 'date'.
+- If the user's message mentions time or date in another context (e.g., "This is the first time...", "Let's schedule for a later date"), respond with 'none'.
+- If the message is a greeting or a general question, respond with 'none'.
+
+User Message:
+"{user_message}"
+
+Classification:"""
+
+        try:
+            response = self.co.chat(
+                message=prompt,
+                model="command-r-plus",
+                temperature=0.0,
+                max_tokens=5
+            )
+            result = response.text.strip().lower()
+            if result in ['time', 'date']:
+                return result
+            else:
+                return 'none'
+        except Exception:
+            return 'none'
+
     def _process_single_message(self, user_message, language_style='en'):
         # Remove /forget command logic
-        # Check for time/date requests
-        time_triggers = [
-            'time', 'current time', 'what time is it?', 'what is the time?', 'tell me the time'
-        ]
-        date_triggers = [
-            'date', 'current date', 'what is the date?', 'tell me the date', 'current day', "today's date"
-        ]
-        user_lower = user_message.lower()
-        if any(trigger in user_lower for trigger in time_triggers) and not any(trigger in user_lower for trigger in date_triggers):
+        # Check for time/date requests using smart logic
+        time_date_intent = self.is_time_or_date_query(user_message)
+
+        if time_date_intent == 'time':
             ist = pytz.timezone('Asia/Kolkata')
             now = datetime.now(ist)
             formatted = now.strftime('%I:%M %p (IST)')
@@ -205,7 +233,8 @@ JSON Output:
                     "Hope your day is going well!"
                 ])
                 return f"{formatted} {playful}"
-        if any(trigger in user_lower for trigger in date_triggers):
+        
+        if time_date_intent == 'date':
             ist = pytz.timezone('Asia/Kolkata')
             now = datetime.now(ist)
             formatted = now.strftime('%A, %B %d, %Y')
