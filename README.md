@@ -1,175 +1,144 @@
 # 🧠 Second Brain Assistant
 
-Your AI-powered personal assistant built with Python and Cohere. This second brain helps you manage tasks, remember important information, search through conversations, and have intelligent conversations.
+Second Brain Assistant is your personal AI-powered helper, built with Python and Cohere. It helps you remember important information, search your memories, and have smart, friendly conversations—all from your terminal.
 
-## ✨ Features
+---
 
-- **🤖 AI-Powered Conversations**: Natural conversations using Cohere's advanced language models
-- **💾 Memory System**: Automatically saves and retrieves important information from conversations
-- **🔍 Smart Search**: Search through your conversation history and saved memories
-- **📚 Teaching & Explanation**: Get detailed explanations and learn new concepts
-- **🎨 Beautiful CLI**: Rich, colorful interface with tables, panels, and status indicators
+## Features
 
-## 🚀 Quick Start
+- **Conversational AI**: Chat naturally with an assistant that understands context and gives clear, concise answers.
+- **Memory System**: Important info from your chats is saved and can be searched or recalled later.
+- **Smart Search**: Instantly search your saved memories and conversation history.
+- **Web Search**: Get up-to-date answers using Google Custom Search.
+- **Weather Info**: Ask for the weather in your city or place.
+- **Simple, Clean CLI**: Enjoy a colorful, easy-to-read interface powered by the Rich library.
+
+---
+
+## Getting Started
 
 ### Prerequisites
 
 - Python 3.7 or higher
-- Cohere API key
-- Google Custom Search API key and CSE ID
-- OpenWeatherMap API key (optional, for weather features)
+- API keys for Cohere, Google Custom Search, and (optionally) OpenWeatherMap
 
 ### Installation
 
-1. **Clone or download the project files**
+1. **Clone this repository**  
+   Download or clone the project files to your computer.
 
-2. **Install dependencies**:
+2. **Install dependencies**  
+   Open a terminal in the project folder and run:
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Create a `.env` file** in your project root with the following content (replace with your actual values):
+3. **Set up your environment variables**  
+   Create a `.env` file in the project root with your API keys and settings:
    ```ini
-   # Cohere API Key
-   COHERE_API_KEY=your-cohere-api-key-here
-
-   # Google Custom Search API Key and CSE ID
-   GOOGLE_API_KEY=your-google-api-key-here
-   GOOGLE_CSE_ID=your-google-cse-id-here
-
-   # OpenWeatherMap API Key (for weather features)
-   OPENWEATHER_API_KEY=your-openweathermap-api-key-here
-
-   # Personal Details (used for weather/location context)
+   COHERE_API_KEY=your-cohere-api-key
+   GOOGLE_API_KEY=your-google-api-key
+   GOOGLE_CSE_ID=your-google-cse-id
+   OPENWEATHER_API_KEY=your-openweathermap-api-key  # (optional)
    CITY=your_city
    PLACE=your_place
-   LATITUDE=your_latitude
-   LONGITUDE=your_longitude
-
-   # Optional: Database and other config
-   DATABASE_PATH=your-databse-path
-   MAX_CONVERSATION_HISTORY=your-max-conversation-history
-   MAX_MEMORY_ENTRIES=your-max-memory-entries
-   KNOWLEDGE_FILE=knowledge_base.json
+   DATABASE_PATH=second_brain.db
    ```
 
-4. **Run the assistant**:
+4. **Run the assistant**
    ```bash
    python main.py
    ```
 
-## 🎯 Usage Examples
+---
 
-### Basic Conversation
-```
-You: Hi! How are you today?
-🤖 Assistant: Hey there! I'm doing great, thanks for asking! How about you? I'm here to help with whatever you need - whether it's managing tasks, explaining something, or just having a friendly chat. What's on your mind?
-```
+## How to Use
 
-### Search Memories
-```
-You: search python
-🔍 Search results for 'python':
-- Python is a high-level programming language known for its simplicity and readability
-- Remember to use virtual environments for Python projects
-- Python's main advantages include extensive libraries and community support
-```
+Just type your questions or commands in the terminal. Here are some things you can try:
 
-### Get Help
-```
-You: help
-Available Commands:
-• help           - Show this help message
-• search <query> - Search through your memories
-• memories       - Show recent memories
-• clear          - Clear the screen
-• quit/exit      - Exit the application
-```
+- **Chat naturally:**  
+  ```
+  You: What's the capital of France?
+  Assistant: The capital of France is Paris.
+  ```
 
-## 🏗️ Architecture
+- **Ask multiple things at once:**  
+  ```
+  You: Who is Nikola Tesla and what did he invent?
+  Assistant: Nikola Tesla was a Serbian-American inventor and engineer. He is best known for his work on alternating current (AC) electricity.
+  ```
 
-The Second Brain Assistant is built with a modular architecture:
+- **Search your memories:**  
+  ```
+  You: search python
+  Assistant: - Python is a high-level programming language...
+  ```
 
-- **`main.py`**: Beautiful CLI interface with Rich library
-- **`ai_assistant.py`**: Core AI logic and Cohere integration
-- **`database.py`**: SQLite database management for conversations and memories
-- **`config.py`**: Configuration and API key management (now loads all secrets from `.env`)
+- **See your recent memories:**  
+  ```
+  You: memories
+  ```
 
-### Database Schema
+- **Get help:**  
+  ```
+  You: help
+  ```
 
-The assistant uses SQLite with two main tables:
+- **Exit:**  
+  ```
+  You: quit
+  ```
 
-1. **conversations**: Stores all conversation exchanges
-2. **memory**: Stores important information and insights
+---
 
-## 🔧 Configuration & Environment Variables
+## Project Structure
 
-All sensitive information and configuration is now managed via environment variables in a `.env` file. **Do not hardcode any API keys or personal details in the code.**
+- `main.py` — The command-line interface and main loop
+- `ai_assistant.py` — Core AI logic and conversation handling
+- `database.py` — Handles saving and searching conversations and memories (SQLite)
+- `google_search.py` — Integrates Google Custom Search for web results
+- `config.py` — Loads configuration from `.env`
+- `requirements.txt` — All required Python packages
 
-**Required variables:**
-- `COHERE_API_KEY`: Your Cohere API key
-- `GOOGLE_API_KEY`: Google Custom Search API key
-- `GOOGLE_CSE_ID`: Google Custom Search Engine ID
-- `OPENWEATHER_API_KEY`: OpenWeatherMap API key (for weather features)
-- `CITY`, `PLACE`: Your default city and place (for weather context)
-- `LATITUDE`, `LONGITUDE`: (Optional) Your location coordinates
-- `DATABASE_PATH`, `MAX_CONVERSATION_HISTORY`, `MAX_MEMORY_ENTRIES`, `KNOWLEDGE_FILE`: (Optional) Other config
+---
 
-**Example:** See the sample `.env` above.
+## Configuration
 
-## 🎨 Features in Detail
+All sensitive info (API keys, database path, etc.) is managed via the `.env` file.  
+**Never hardcode your keys in the code!**
 
-### Intelligent Context Awareness
-The assistant remembers your conversation history and uses it to provide more relevant responses. It automatically builds context from:
-- Recent conversations
-- Important memories
-- User preferences
+---
 
-### Smart Classification
-The assistant automatically detects when you're:
-- Searching for information (search, find, look for)
-- Asking for explanations (explain, teach, how does)
-- Saving important information (remember, save, important)
+## Dependencies
 
-### Memory Management
-Important information is automatically extracted and saved:
-- User requests to remember something
-- Detailed explanations provided by the assistant
-- Task-related information
-- Personal preferences and details
+Key libraries used:
+- `cohere` — For AI-powered conversation
+- `rich` — For a beautiful terminal interface
+- `googletrans` — For translation features
+- `requests` — For web and API calls
+- `python-dotenv` — For environment variable management
+- `langdetect` — For language detection
 
-## 🛠️ Development
-
-### Adding New Features
-
-1. **New Commands**: Add handlers in `main.py`
-2. **AI Capabilities**: Extend `ai_assistant.py`
-3. **Data Storage**: Modify `database.py` schema
-4. **Configuration**: Update `config.py` and `.env`
-
-### Testing
-
-The assistant can be tested by running it and trying various commands:
+Install all dependencies with:
 ```bash
-python main.py
+pip install -r requirements.txt
 ```
 
-## 🤝 Contributing
+---
 
-Feel free to enhance the assistant with:
-- New AI capabilities
-- Additional task management features
-- Better memory organization
-- Web interface
-- Mobile app integration
+## Notes & Tips
 
-## 📝 License
+- When you ask multiple questions in one message, the assistant will answer them in order, but only the first answer will be prefixed with “Assistant:” for a cleaner look.
+- All your important info and memories are stored in a local SQLite database.
+- You can easily extend the assistant by editing or adding Python files.
 
-This project is open source. Feel free to use and modify for your personal use.
+---
 
-## 🆘 Troubleshooting
+## License
 
-### Common Issues
+This project is open source. Feel free to use, modify, and share it for personal or educational purposes.
 
-1. **API Key Error**: Make sure your API keys are set correctly in your `.env` file
-2. **Import Errors**: Install all dependencies with `
+---
+
+If you have any questions or want to contribute, just open an issue or pull request.  
+Enjoy your new Second Brain! 🧠

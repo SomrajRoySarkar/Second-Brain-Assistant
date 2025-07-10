@@ -112,6 +112,20 @@ class SecondBrainCLI:
             return True
         return False
     
+    def _process_and_print(self, message):
+        """Processes a single message and prints the assistant's response."""
+        try:
+            language_style = self.detect_language_style(message)
+            response = self.assistant.process_message(message, language_style=language_style)
+            
+            if "\n\n" in response:
+                self.console.print(response.strip())
+            else:
+                self.console.print(response.strip())
+        except Exception as e:
+            self.console.print(f"[red]Error processing message: {str(e)}[/red]")
+            self.console.print("[yellow]I'm having trouble processing that. Could you try rephrasing?[yellow]")
+
     def run(self):
         """Main application loop"""
         self.display_welcome()
@@ -152,22 +166,38 @@ class SecondBrainCLI:
                     response = self.assistant._handle_memory_commands(user_input)
                     self.console.print(response)
                     continue
-                # Process as regular conversation
-                self.console.print("\n[bold green]🤖 Assistant[/bold green]")
-                try:
-                    language_style = self.detect_language_style(user_input)
-                    with self.console.status("[bold green]Thinking..."):
-                        response = self.assistant.process_message(user_input, language_style=language_style)
-                    # Combine all responses into a single chat block (no panels, no numbering)
-                    if "\n\n" in response:
-                        self.console.print(response.strip())
+                # Process user input
+                # Do not print the user's command
+
+                with self.console.status("[bold green]Thinking..."):
+                    # Use the new AI-powered splitter
+                    questions = self.assistant.split_into_questions(user_input)
+
+                    if len(questions) > 1:
+                        all_answers = []
+                        for idx, question in enumerate(questions):
+                            try:
+                                language_style = self.detect_language_style(question)
+                                response = self.assistant.process_message(question, language_style=language_style)
+                                if idx == 0:
+                                    all_answers.append(f"[bold green]Assistant[/bold green]: {response.strip()}")
+                                else:
+                                    all_answers.append(response.strip())
+                            except Exception as e:
+                                self.console.print(f"[red]Error processing message: {str(e)}[/red]")
+                                self.console.print("[yellow]I'm having trouble processing that. Could you try rephrasing?[yellow]")
+                                continue
+                        
+                        combined_response = " ".join(all_answers)
+                        
+                        if len(combined_response) < 80 and '\n' not in combined_response:
+                            self.console.print(combined_response)
+                        else:
+                            self.console.print("\n\n".join(all_answers))
                     else:
-                        self.console.print(response.strip())
-                    # Remove [Memory saved] message
-                except Exception as e:
-                    self.console.print(f"[red]Error processing message: {str(e)}[/red]")
-                    # Try to provide a fallback response
-                    self.console.print("[yellow]I'm having trouble processing that. Could you try rephrasing?[yellow]")
+                        # If there's only one question, process it directly
+                        response = self.assistant.process_message(user_input, language_style=self.detect_language_style(user_input))
+                        self.console.print(f"[bold green]Assistant[/bold green]: {response.strip()}")
                 
             except KeyboardInterrupt:
                 self.console.print("\n[yellow]Goodbye! Thanks for using your Second Brain! 🧠[/yellow]")

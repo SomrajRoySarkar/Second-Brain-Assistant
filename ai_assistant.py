@@ -25,7 +25,7 @@ class SecondBrainAssistant:
         self.co = cohere.Client(COHERE_API_KEY)
         self.db = SecondBrainDB()
         self.conversation_history = []
-        self.system_prompt = """IMPORTANT: You are a helpful assistant. Be natural, brief, and conversational.\n\nCRITICAL RULES:\n- Keep responses short and casual\n- NO robotic or overly enthusiastic language\n- NO long greetings or unnecessary text\n- Respond directly to what the user says\n- Be helpful but brief\n- If using web results, summarize in 2-3 sentences max, and sound like a real person\n\nEXAMPLES:\n- User says \"hey\" → You MUST respond: \"Hey. What's up?\" or similar short greeting\n- User asks a question → Give a brief, clear answer (2-3 sentences)\n- User seems tired/frustrated → Show empathy briefly\n\nBE NATURAL, HELPFUL, AND TO THE POINT. NO LONG RESPONSES."""
+        self.system_prompt = """You are a friendly and helpful assistant. Your main goal is to provide clear, complete answers in a natural, conversational way.\n\n**Core Instructions:**\n1.  **Simple and Clear:** Use easy-to-understand words. Avoid jargon or complex vocabulary.\n2.  **Full Sentences:** Always use grammatically correct, complete sentences. For example, instead of just "Paris," say, "The capital of France is Paris."\n3.  **Friendly Tone:** Be approachable and conversational, like a real person.\n4.  **Be Concise:** Keep your answers brief and to the point (usually 2-3 sentences).\n5.  **Directly Answer:** Always address the user's question directly.\n\n**Example:**\n*   **User:** what's the time and how are you\n*   **Good Response:** "I'm doing well, thanks for asking! The current time is 3:15 PM."\n*   **Bad Response:** "3:15 PM. I am an AI."\n\nYour primary goal is to be helpful, clear, and friendly."""
         self.greeting_responses = [
             "Hey.",
             "Hey! Everything okay?",
@@ -56,7 +56,48 @@ class SecondBrainAssistant:
             context_parts.append("\nImportant memories:")
             for memory in memories:
                 context_parts.append(f"- {memory[1]}")  # memory[1] is content
-        return "\n".join(context_parts)
+        return "\\n".join(context_parts)
+    
+    def split_into_questions(self, user_message):
+        """
+        Uses the language model to split a user's message into distinct questions or statements.
+        """
+        # A simple heuristic to avoid an API call for very simple inputs
+        if len(user_message.split()) < 7 and ' and ' not in user_message and '?' not in user_message[1:]:
+            return [user_message]
+
+        prompt = f"""You are a text-processing utility. Your task is to analyze the following user message and split it into individual, self-contained questions or statements.
+Return the output as a single, raw JSON-formatted list of strings. Do not include any other text or formatting.
+
+- If there is only one question, return a list with a single string.
+- Split compound sentences into separate items. For example, "What is the capital of France and what is the weather there?" should become ["What is the capital of France?", "what is the weather there?"].
+- Preserve the original phrasing.
+
+User Message:
+"{user_message}"
+
+JSON Output:
+"""
+        try:
+            response = self.co.chat(
+                message=prompt,
+                model="command-r-plus",
+                temperature=0.0,
+            )
+            
+            # Find and parse the JSON list from the response text
+            json_str_match = re.search(r'\[.*\]', response.text, re.DOTALL)
+            if json_str_match:
+                # The raw string from the model might have escaped characters that need to be handled
+                parsed_json = json.loads(json_str_match.group(0))
+                if isinstance(parsed_json, list) and all(isinstance(q, str) for q in parsed_json):
+                    return parsed_json
+            
+            # Fallback if parsing fails or no JSON is found
+            return [user_message]
+        except Exception:
+            # If the API call or JSON parsing fails, return the original message as a single question.
+            return [user_message]
     
     def process_message(self, user_message, language_style='en'):
         return self._process_single_message(user_message, language_style=language_style)
