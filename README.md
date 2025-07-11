@@ -11,6 +11,7 @@ Second Brain Assistant is your personal AI-powered helper, built with Python and
 - **Smart Search**: Instantly search your saved memories and conversation history.
 - **Web Search**: Get up-to-date answers using Google Custom Search.
 - **Weather Info**: Ask for the weather in your city or place.
+- **PDF Report Generation**: Create formal, professional PDF reports with custom titles and content.
 - **Simple, Clean CLI**: Enjoy a colorful, easy-to-read interface powered by the Rich library.
 
 ---
@@ -90,6 +91,24 @@ Just type your questions or commands in the terminal. Here are some things you c
   ```
   You: /explain Newton's Laws; for 5 marks; format: bullet points
   Assistant: [Explanation tailored for 5 marks, in bullet points]
+  ```
+
+- **Generate a topic-based report (with automatic web search):**  
+  ```
+  You: /report Artificial Intelligence in Healthcare
+  Assistant: Report 'Artificial Intelligence In Healthcare' generated successfully. Find it at ./reports/artificial_intelligence_in_healthcare_20240101_120000.pdf
+  ```
+
+- **Generate a formal PDF report with custom title:**  
+  ```
+  You: /report title: Market Analysis Report content: Create a comprehensive analysis of the current market trends in renewable energy sector
+  Assistant: Report 'Market Analysis Report' generated successfully. Find it at ./reports/market_analysis_report_20240101_120000.pdf
+  ```
+
+- **Generate a report with custom sections:**  
+  ```
+  You: /report title: Project Report sections: Project Overview, Technical Implementation, Results, Future Work
+  Assistant: Report 'Project Report' generated successfully. Find it at ./reports/project_report_20240101_120001.pdf
   ```
 
 - **See your recent memories:**  

@@ -44,7 +44,8 @@ class SecondBrainCLI:
             "🔍 Searching through your memories",
             "📚 Explaining concepts and teaching",
             "💾 Remembering important information",
-            "💬 Having friendly conversations"
+            "💬 Having friendly conversations",
+            "📄 Generating formal PDF reports"
         ]
         
         for feature in features:
@@ -68,6 +69,9 @@ class SecondBrainCLI:
             ("memory search <query>", "Search memories"),
             ("memory add <content>", "Add new memory"),
             ("/explain <topic>[; for X marks][; format: ...]", "Get a detailed explanation of a topic, optionally for marks or in a specific format"),
+            ("/report <topic>", "Generate a comprehensive PDF report on any topic (with web search)"),
+            ("/report title: ... content: ...", "Generate a custom PDF report with specific title and content"),
+            ("/report title: ... sections: ...", "Generate a report with custom sections (comma-separated)"),
             ("clear", "Clear the screen"),
             ("quit/exit", "Exit the application")
         ]

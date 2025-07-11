@@ -7,3 +7,5 @@ googletrans==4.0.0rc1
 langdetect==1.0.9
 httpx==0.13.3
 httpcore==0.9.1
+reportlab==4.0.4
+Pillow==10.0.0

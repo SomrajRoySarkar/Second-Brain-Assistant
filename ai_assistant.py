@@ -139,10 +139,25 @@ JSON Output:
         except Exception as e:
             return f"I'm having trouble generating the explanation right now. Error: {str(e)}"
 
+    def handle_report_command(self, user_message):
+        """Handle /report command: parse the request and generate a PDF report."""
+        from report_generator import PDFReportGenerator
+        generator = PDFReportGenerator()
+        file_path, title = generator.generate_report(user_message, self)
+        if file_path:
+            return f"Report '{title}' generated successfully. Find it at {file_path}"
+        else:
+            return f"Failed to generate report: {title}"
+    
     def process_message(self, user_message, language_style='en'):
         # Handle /explain command
         if user_message.strip().lower().startswith('/explain'):
             return self.handle_explain_command(user_message)
+        
+        # Handle /report command
+        if user_message.strip().lower().startswith('/report'):
+            return self.handle_report_command(user_message)
+        
         return self._process_single_message(user_message, language_style=language_style)
 
     def needs_web_search(self, user_message):
