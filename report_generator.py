@@ -54,6 +54,7 @@ class PDFReportGenerator:
             fontSize=12,
             spaceAfter=12,
             spaceBefore=20,
+            alignment=TA_CENTER,
             textColor=black,
             fontName='Helvetica-Bold'  # Using Helvetica-Bold as Arial Black equivalent
         ))
@@ -65,6 +66,7 @@ class PDFReportGenerator:
             fontSize=12,
             spaceAfter=8,
             spaceBefore=16,
+            alignment=TA_CENTER,
             textColor=black,
             fontName='Helvetica-Bold'
         ))
