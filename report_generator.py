@@ -138,98 +138,114 @@ class PDFReportGenerator:
             'format': 'professional',
             'include_toc': True,
             'content': request,
-            'topic_only': False,
+            'topic_only': True,
             'custom_sections': [],
             'filename': 'report'
         }
         
-        # Standard professional report sections
-        standard_sections = [
-            'Title Page',
-            'Declaration / Certification', 
-            'Acknowledgment',
-            'Abstract / Executive Summary',
-            'Table of Contents',
-            'List of Figures / Tables / Abbreviations',
-            'Introduction',
-            'Methodology / Approach',
-            'Implementation / Work Done / Analysis',
-            'Observations and Findings',
-            'Challenges Faced',
-            'Conclusion',
-            'Suggestions / Recommendations',
-            'References / Bibliography',
-            'Annexures / Appendices'
-        ]
+        # Always treat the input as a topic-based request for simplicity
+        report_data['content'] = request
         
-        # Check if this is a topic-only request (no explicit keywords)
-        if 'title:' not in request.lower() and 'content:' not in request.lower() and 'sections:' not in request.lower():
-            # This is a topic-only request
-            report_data['topic_only'] = True
-            report_data['content'] = request
-            
-            # Use AI to intelligently summarize the description for a concise topic name
-            report_data['title'] = self.generate_topic_title(request, ai_assistant)
-            # Create clean filename from title (without "Report" suffix)
-            clean_title = report_data['title'].replace(' Report', '').replace(' Analysis', '').replace(' Study', '').replace(' Research', '')
-            report_data['filename'] = clean_title.lower().replace(' ', '_').replace('/', '_').replace('\\', '_')
-            report_data['filename'] = ''.join(c for c in report_data['filename'] if c.isalnum() or c in ('_', '-'))
-            
-            # Use essential sections for topic-only reports
-            report_data['sections'] = [
-                'Abstract / Executive Summary',
-                'Introduction', 
-                'Implementation / Work Done / Analysis',
-                'Observations and Findings',
-                'Conclusion',
-                'Suggestions / Recommendations'
-            ]
-        else:
-            # Parse structured request
-            if 'title:' in request.lower():
-                parts = request.split('title:', 1)
-                if len(parts) > 1:
-                    title_part = parts[1].strip()
-                    # Extract title (until next keyword or end)
-                    title_end = min([
-                        title_part.find('content:') if 'content:' in title_part else len(title_part),
-                        title_part.find('sections:') if 'sections:' in title_part else len(title_part),
-                        title_part.find('\n') if '\n' in title_part else len(title_part)
-                    ])
-                    report_data['title'] = title_part[:title_end].strip()
-                    # Create filename from title
-                    report_data['filename'] = report_data['title'].lower().replace(' ', '_')
-            
-            if 'content:' in request.lower():
-                parts = request.split('content:', 1)
-                if len(parts) > 1:
-                    report_data['content'] = parts[1].strip()
-            
-            # Parse custom sections
-            if 'sections:' in request.lower():
-                parts = request.split('sections:', 1)
-                if len(parts) > 1:
-                    sections_part = parts[1].strip()
-                    # Split by common delimiters
-                    custom_sections = [s.strip() for s in sections_part.replace(',', '|').replace(';', '|').split('|')]
-                    report_data['custom_sections'] = [s for s in custom_sections if s]
-                    
-                    # Combine with essential sections
-                    essential_sections = ['Abstract / Executive Summary', 'Introduction', 'Conclusion']
-                    all_sections = essential_sections + report_data['custom_sections']
-                    report_data['sections'] = list(dict.fromkeys(all_sections))  # Remove duplicates
-                else:
-                    # Use default essential sections
-                    report_data['sections'] = [
-                        'Abstract / Executive Summary',
-                        'Introduction',
-                        'Implementation / Work Done / Analysis', 
-                        'Observations and Findings',
-                        'Conclusion',
-                        'Suggestions / Recommendations'
-                    ]
+        # Use AI to intelligently summarize the description for a concise topic name
+        report_data['title'] = self.generate_topic_title(request, ai_assistant)
+        # Create a clean filename from title (without "Report" suffix)
+        clean_title = report_data['title'].replace(' Report', '').replace(' Analysis', '').replace(' Study', '').replace(' Research', '')
+        report_data['filename'] = clean_title.lower().replace(' ', '_').replace('/', '_').replace('\\', '_')
+        report_data['filename'] = ''.join(c for c in report_data['filename'] if c.isalnum() or c in ('_', '-'))
+        
+        # Use AI to generate intelligent sections based on content type
+        report_data['sections'] = self.generate_intelligent_sections(request, ai_assistant)
         
         return report_data
+
+    def generate_intelligent_sections(self, user_input, ai_assistant):
+        """Generate intelligent section headings based on content type and user request"""
+        sections_prompt = f"""
+        You are an expert report structuring assistant. Based on the user's request/topic, determine the most appropriate section headings for a professional report.
+        
+        User Request/Topic: "{user_input}"
+        
+        Instructions:
+        - Analyze the content type and subject matter
+        - Generate 4-8 appropriate section headings that would best organize this specific report
+        - Consider the nature of the content (biography, technical analysis, business report, research study, etc.)
+        - Use professional, clear headings that are specific to the content type
+        - Always include "Introduction" as the first section and "Conclusion" as the last section
+        - Make headings specific and relevant to the actual topic, not generic
+        - For example:
+          * For a biography: "Early Life", "Career Highlights", "Major Achievements", "Personal Life", "Legacy"
+          * For a technical analysis: "Technical Overview", "Current Implementation", "Performance Analysis", "Future Developments"
+          * For a business report: "Market Analysis", "Financial Performance", "Strategic Recommendations"
+          * For a research study: "Literature Review", "Methodology", "Findings", "Discussion"
+        
+        Respond with ONLY the section headings, one per line, in the order they should appear:
+        """
+        
+        try:
+            response = ai_assistant.co.chat(
+                message=sections_prompt,
+                model="command-r-plus",
+                temperature=0.4,
+                max_tokens=200
+            )
+            
+            # Parse the response to extract section headings
+            sections = []
+            for line in response.text.strip().split('\n'):
+                section = line.strip()
+                if section and not section.startswith('*') and not section.startswith('-'):
+                    # Clean up any numbering or bullets
+                    section = section.lstrip('0123456789. ').strip()
+                    if section:
+                        sections.append(section)
+            
+            # Ensure we have at least basic sections
+            if not sections:
+                sections = ['Introduction', 'Main Content', 'Analysis', 'Conclusion']
+            
+            # Ensure Introduction is first and Conclusion is last (if not already)
+            if 'Introduction' not in sections:
+                sections.insert(0, 'Introduction')
+            if 'Conclusion' not in sections:
+                sections.append('Conclusion')
+            
+            return sections[:8]  # Limit to 8 sections maximum
+            
+        except Exception as e:
+            # Fallback to content-type based sections
+            return self.get_fallback_sections(user_input)
+    
+    def get_fallback_sections(self, user_input):
+        """Generate fallback sections based on content keywords"""
+        input_lower = user_input.lower()
+        
+        # Biography/Person-related
+        if any(word in input_lower for word in ['biography', 'life', 'person', 'born', 'died', 'career', 'achievements']):
+            return ['Introduction', 'Early Life', 'Career', 'Major Achievements', 'Personal Life', 'Legacy', 'Conclusion']
+        
+        # Technical/Technology-related
+        elif any(word in input_lower for word in ['technology', 'technical', 'software', 'system', 'development', 'programming']):
+            return ['Introduction', 'Technical Overview', 'Current State', 'Implementation', 'Analysis', 'Future Prospects', 'Conclusion']
+        
+        # Business/Market-related
+        elif any(word in input_lower for word in ['business', 'market', 'company', 'financial', 'economy', 'strategy']):
+            return ['Introduction', 'Market Overview', 'Current Situation', 'Analysis', 'Strategic Recommendations', 'Conclusion']
+        
+        # Research/Study-related
+        elif any(word in input_lower for word in ['research', 'study', 'analysis', 'investigation', 'findings']):
+            return ['Introduction', 'Literature Review', 'Methodology', 'Findings', 'Discussion', 'Conclusion']
+        
+        # Health/Medical-related
+        elif any(word in input_lower for word in ['health', 'medical', 'disease', 'treatment', 'medicine', 'healthcare']):
+            return ['Introduction', 'Background', 'Current Understanding', 'Treatment Options', 'Future Directions', 'Conclusion']
+        
+        # Education-related
+        elif any(word in input_lower for word in ['education', 'learning', 'school', 'university', 'teaching', 'curriculum']):
+            return ['Introduction', 'Current State', 'Challenges', 'Best Practices', 'Recommendations', 'Conclusion']
+        
+        # Default general sections
+        else:
+            return ['Introduction', 'Background', 'Current Situation', 'Analysis', 'Key Findings', 'Recommendations', 'Conclusion']
 
     def generate_topic_title(self, user_input, ai_assistant):
         """Use AI to generate a concise, professional topic title from user input"""
