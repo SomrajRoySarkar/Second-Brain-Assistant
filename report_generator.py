@@ -440,9 +440,10 @@ class PDFReportGenerator:
         # Add main content sections
         section_contents = self.generate_section_content(report_data, ai_assistant, detailed_content)
         
-        for section_name in report_data['sections']:
-            # Start each section on a new page with a heading
-            story.append(PageBreak())
+        for i, section_name in enumerate(report_data['sections']):
+            # Start each section on a new page with a heading (except the first one)
+            if i > 0:  # Don't add PageBreak for the first section
+                story.append(PageBreak())
             story.append(Paragraph(section_name, self.styles['SectionHeading']))
             story.append(Spacer(1, 0.1*inch))
             
