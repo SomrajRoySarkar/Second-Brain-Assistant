@@ -9,16 +9,10 @@ from google_search import google_search
 import threading
 import dateparser
 import pytz
-import requests
 from googletrans import Translator
 import os
 from dotenv import load_dotenv
 load_dotenv()
-
-CITY = os.getenv('CITY', 'your_city')
-PLACE = os.getenv('PLACE', 'your_place')
-LATITUDE = os.getenv('LATITUDE', None)
-LONGITUDE = os.getenv('LONGITUDE', None)
 
 class SecondBrainAssistant:
     def __init__(self):
@@ -164,78 +158,6 @@ JSON Output:
         """Check if a message needs web search: only if it starts with '/search '."""
         return user_message.strip().lower().startswith('/search ')
 
-    def get_weather(self, city, place, api_key):
-        """Fetch weather data for the given city and place using OpenWeatherMap API."""
-        # Compose location string
-        location = f"{place}, {city}"
-        url = f"https://api.openweathermap.org/data/2.5/weather"
-        params = {
-            'q': location,
-            'appid': api_key,
-            'units': 'metric'
-        }
-        try:
-            response = requests.get(url, params=params, timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                weather = data['weather'][0]['description'].capitalize()
-                temp = data['main']['temp']
-                humidity = data['main']['humidity']
-                rain = data.get('rain', {}).get('1h', 0)
-                summary = f"Weather in {location}: {weather}, {temp}°C, Humidity: {humidity}%. "
-                if rain > 0:
-                    summary += f"Rain in the last hour: {rain}mm."
-                else:
-                    summary += "No rain in the last hour."
-                return summary
-            else:
-                return f"Couldn't fetch weather for {location}. (Status: {response.status_code})"
-        except Exception as e:
-            return f"Error fetching weather: {str(e)}"
-
-    def get_weather_forecast(self, city, place, api_key, hours_ahead=3):
-        """Fetch weather forecast for the given city and place for the next N hours using OpenWeatherMap API."""
-        location = f"{place}, {city}"
-        url = f"https://api.openweathermap.org/data/2.5/forecast"
-        params = {
-            'q': location,
-            'appid': api_key,
-            'units': 'metric'
-        }
-        try:
-            response = requests.get(url, params=params, timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                # Find the forecast closest to hours_ahead from now
-                from datetime import datetime, timedelta
-                now = datetime.utcnow()
-                target_time = now + timedelta(hours=hours_ahead)
-                closest = None
-                min_diff = float('inf')
-                for entry in data['list']:
-                    forecast_time = datetime.utcfromtimestamp(entry['dt'])
-                    diff = abs((forecast_time - target_time).total_seconds())
-                    if diff < min_diff:
-                        min_diff = diff
-                        closest = entry
-                if closest:
-                    weather = closest['weather'][0]['description'].capitalize()
-                    temp = closest['main']['temp']
-                    humidity = closest['main']['humidity']
-                    rain = closest.get('rain', {}).get('3h', 0)
-                    forecast_time = datetime.utcfromtimestamp(closest['dt']).strftime('%Y-%m-%d %H:%M UTC')
-                    summary = f"Forecast for {location} at {forecast_time}: {weather}, {temp}°C, Humidity: {humidity}%. "
-                    if rain > 0:
-                        summary += f"Rain: {rain}mm."
-                    else:
-                        summary += "No rain expected."
-                    return summary
-                else:
-                    return f"No forecast data available for {location}."
-            else:
-                return f"Couldn't fetch forecast for {location}. (Status: {response.status_code})"
-        except Exception as e:
-            return f"Error fetching forecast: {str(e)}"
 
     def is_time_or_date_query(self, user_message):
         """
@@ -309,31 +231,6 @@ Classification:"""
                 ])
                 return f"{formatted}. {friendly}"
 
-        # Weather intent detection (before web search)
-        weather_keywords = [
-            'weather', 'rain', 'temperature', 'forecast', 'humidity', 'sunny', 'cloudy', 'windy', 'storm', 'climate'
-        ]
-        forecast_keywords = ['forecast', 'next', 'later', 'in', 'after', 'upcoming', 'future']
-        user_lower = user_message.lower()
-        # Detect if user asks for future weather (e.g., 'in 2 hours', 'next 3 hours')
-        future_match = re.search(r'in (\d{1,2}) ?-? ?(\d{0,2})? ?hours?', user_lower)
-        if any(word in user_lower for word in weather_keywords):
-            city = CITY
-            place = PLACE
-            api_key = os.getenv('OPENWEATHER_API_KEY')
-            # If future/forecast intent detected
-            if any(word in user_lower for word in forecast_keywords) or future_match:
-                hours_ahead = 3
-                if future_match:
-                    h1 = int(future_match.group(1))
-                    h2 = future_match.group(2)
-                    if h2:
-                        hours_ahead = (h1 + int(h2)) // 2
-                    else:
-                        hours_ahead = h1
-                return self.get_weather_forecast(city, place, api_key, hours_ahead)
-            else:
-                return self.get_weather(city, place, api_key)
 
         # Check for memory-related commands first
         if user_message.lower().startswith('memory'):

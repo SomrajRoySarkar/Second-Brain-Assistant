@@ -10,7 +10,6 @@ Second Brain Assistant is your personal AI-powered helper, built with Python and
 - **Memory System**: Important info from your chats is saved and can be searched or recalled later.
 - **Smart Search**: Instantly search your saved memories and conversation history.
 - **Web Search**: Get up-to-date answers using Google Custom Search.
-- **Weather Info**: Ask for the weather in your city or place.
 - **PDF Report Generation**: Create formal, professional PDF reports with custom titles and content.
 - **Simple, Clean CLI**: Enjoy a colorful, easy-to-read interface powered by the Rich library.
 
@@ -21,7 +20,7 @@ Second Brain Assistant is your personal AI-powered helper, built with Python and
 ### Prerequisites
 
 - Python 3.7 or higher
-- API keys for Cohere, Google Custom Search, and (optionally) OpenWeatherMap
+- API keys for Cohere and Google Custom Search
 
 ### Installation
 
@@ -40,9 +39,6 @@ Second Brain Assistant is your personal AI-powered helper, built with Python and
    COHERE_API_KEY=your-cohere-api-key
    GOOGLE_API_KEY=your-google-api-key
    GOOGLE_CSE_ID=your-google-cse-id
-   OPENWEATHER_API_KEY=your-openweathermap-api-key  # (optional)
-   CITY=your_city
-   PLACE=your_place
    DATABASE_PATH=second_brain.db
    ```
 
