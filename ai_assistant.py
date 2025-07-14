@@ -21,35 +21,51 @@ class SecondBrainAssistant:
         self.conversation_history = []
         self.system_prompt = """You are a friendly and helpful assistant. Your main goal is to provide clear, complete answers in a natural, conversational way.\n\n**Core Instructions:**\n1.  **Simple and Clear:** Use easy-to-understand words. Avoid jargon or complex vocabulary.\n2.  **Full Sentences:** Always use grammatically correct, complete sentences. For example, instead of just "Paris," say, "The capital of France is Paris."\n3.  **Friendly Tone:** Be approachable and conversational, like a real person.\n4.  **Be Concise:** Keep your answers brief and to the point (usually 2-3 sentences).\n5.  **Directly Answer:** Always address the user's question directly.\n\n**Example:**\n*   **User:** what's the time and how are you\n*   **Good Response:** "I'm doing well, thanks for asking! The current time is 3:15 PM."\n*   **Bad Response:** "3:15 PM. I am an AI."\n\nYour primary goal is to be helpful, clear, and friendly."""
         self.greeting_responses = [
-            "Hey.",
-            "Hey! Everything okay?",
-            "Yo.",
-            "Hi there.",
-            "Hello!",
-            "Hey, what's up?",
-            "Hey, how's it going?",
-            "Hi!",
-            "Hey, you good?",
-            "Hey, how are you?"
+            "Hi, how are you today?",
+            "Hello! What's new with you?",
+            "Hey there, I'm here to chat!",
+            "Greetings! How can I assist you today?",
+            "Hey! Anything on your mind?",
+            "Hi! What would you like to talk about today?",
+            "Hello! Hope you're having a good day!",
+            "Hey! How's everything going?",
+            "Hi! Let's make today great!",
+            "Hello! I'm here whenever you need me."
         ]
         self.last_greeting = None
     
     def get_context(self):
-        """Build context from recent conversations and memories"""
+        """Build enriched context from user profile, recent interactions and key memories"""
         context_parts = []
+        
+        # Get user profile information
+        user_profile = self.db.get_user_profile()
+        if user_profile:
+            context_parts.append("About you:")
+            if user_profile.get('name'):
+                context_parts.append(f"- Your name is {user_profile['name']}")
+            if user_profile.get('birthday'):
+                context_parts.append(f"- Your birthday is {user_profile['birthday']}")
+            if user_profile.get('friends'):
+                context_parts.append(f"- Your friends: {user_profile['friends']}")
+            if user_profile.get('interests'):
+                context_parts.append(f"- Your interests: {user_profile['interests']}")
+        
         # Get recent conversations
         recent_conversations = self.db.get_recent_conversations(5)
         if recent_conversations:
-            context_parts.append("Recent conversations:")
+            context_parts.append("\nRecent conversations:")
             for conv in recent_conversations:
-                context_parts.append(f"User: {conv[0]}")
-                context_parts.append(f"Assistant: {conv[1]}")
-        # Get important memories
-        memories = self.db.get_memories(limit=10)
+                context_parts.append(f"You: {conv[0]}")
+                context_parts.append(f"Me: {conv[1]}")
+        
+        # Get important memories with more insight
+        memories = self.db.get_memories(limit=5)
         if memories:
-            context_parts.append("\nImportant memories:")
+            context_parts.append("\nImportant things you've told me:")
             for memory in memories:
                 context_parts.append(f"- {memory[1]}")  # memory[1] is content
+        
         return "\\n".join(context_parts)
     
     def split_into_questions(self, user_message):
@@ -92,6 +108,62 @@ JSON Output:
         except Exception:
             # If the API call or JSON parsing fails, return the original message as a single question.
             return [user_message]
+    
+    def should_combine_responses(self, user_message, responses):
+        """
+        Determines whether multiple responses should be combined into one cohesive response
+        or kept separate based on the context and content.
+        """
+        # Always combine if there's only one response
+        if len(responses) <= 1:
+            return True
+            
+        # Check if the original message suggests a unified response is expected
+        unified_indicators = [
+            "tell me about", "explain", "describe", "what is", "how to",
+            "my name is", "i am", "introduce", "hello", "hi", "hey"
+        ]
+        
+        message_lower = user_message.lower()
+        if any(indicator in message_lower for indicator in unified_indicators):
+            return True
+            
+        # Check if responses are related (simple heuristic)
+        if len(responses) == 2 and len(user_message) < 100:
+            return True
+            
+        # For longer, complex queries with multiple distinct questions
+        return False
+    
+    def create_unified_response(self, user_message, questions):
+        """
+        Creates a single, cohesive response to multiple related questions or statements
+        instead of processing them separately.
+        """
+        # Build context for unified response
+        context = self.get_context()
+        
+        # Create a prompt that asks for a unified response to all parts of the message
+        unified_prompt = f"""Instructions: {self.system_prompt}
+        
+Context: {context if context else 'None'}
+        
+User Message: {user_message}
+        
+Please provide a single, cohesive response that addresses all parts of the user's message naturally. 
+Do not treat each part separately - instead, create one flowing, conversational response that feels human and natural."""
+        
+        try:
+            response = self.co.chat(
+                message=unified_prompt,
+                model="command-r-plus",
+                temperature=0.7,
+                max_tokens=1000
+            )
+            return response.text.strip()
+        except Exception as e:
+            # Fallback to processing the first question if unified response fails
+            return self.process_message(questions[0]) if questions else f"I'm having trouble processing that right now. Error: {str(e)}"
     
     def handle_explain_command(self, user_message):
         """Handle /explain command: parse topic, optional marks, and format, then generate a detailed explanation."""
@@ -305,30 +377,45 @@ Classification:"""
             return 'conversation'
     
     def _extract_and_save_memory(self, user_message, assistant_response):
-        """Extract important information and save to memory"""
+        """Extract personal information and selectively save to memory or user profile"""
         user_lower = user_message.lower()
-        
-        # Check for explicit memory requests
+
+        # Handle personal information differently by updating the user profile
+        if 'my name is' in user_lower:
+            name = user_message.split('my name is')[-1].strip().split()[0]
+            self.db.save_user_profile(name=name)
+            return
+
+        if 'my birthday is' in user_lower or 'i was born on' in user_lower:
+            dob_keywords = ['my birthday is', 'i was born on']
+            for keyword in dob_keywords:
+                if keyword in user_lower:
+                    birthday = user_message.split(keyword)[-1].strip().split('.')[0]
+                    self.db.save_user_profile(birthday=birthday)
+            return
+
+        if 'my friend is' in user_lower:
+            friend_name = user_message.split('my friend is')[-1].strip().split('.')[0]
+            current_profile = self.db.get_user_profile() or {}
+            friends = current_profile.get('friends', '') + f', {friend_name}'
+            self.db.save_user_profile(friends=friends.strip(', '))
+            return
+
+        # General important information
         memory_keywords = ['remember this', 'save this', 'important', 'note this', 'memorize', 'keep in mind']
         if any(phrase in user_lower for phrase in memory_keywords):
             # Save the user's message as memory with high importance
             self.db.save_memory(user_message, "user_request", 3)
             return
-        
-        # Check for personal information
-        personal_keywords = ['my name is', 'i am', 'i\'m', 'i work', 'i live', 'my birthday', 'my age']
-        if any(phrase in user_lower for phrase in personal_keywords):
-            self.db.save_memory(f"Personal info: {user_message}", "personal", 3)
-            return
-        
+
         # Check for preferences
         preference_keywords = ['i like', 'i prefer', 'i don\'t like', 'i hate', 'favorite', 'least favorite']
         if any(phrase in user_lower for phrase in preference_keywords):
             self.db.save_memory(f"Preference: {user_message}", "preference", 2)
             return
-        
-        # Check for detailed explanations that might be worth remembering
-        if len(assistant_response) > 150 and any(word in user_lower for word in ['explain', 'teach', 'how', 'what is', 'why']):
+
+        # Context-based special saves
+        if len(assistant_response) >= 150 and any(word in user_lower for word in ['explain', 'teach', 'how', 'what is', 'why']):
             # Extract key points from the explanation
             key_points = self._extract_key_points(assistant_response)
             if key_points:
@@ -395,6 +482,40 @@ Classification:"""
         else:
             return f"❌ Memory {memory_id} not found."
     
+    def get_user_profile_summary(self):
+        """Get a summary of user profile information"""
+        profile = self.db.get_user_profile()
+        if not profile:
+            return "👤 No profile information saved yet.\n\nTip: Tell me about yourself! Say things like 'My name is...' or 'My birthday is...'"
+        
+        result = "👤 Your Profile:\n"
+        
+        if profile.get('name'):
+            result += f"\n🏷️ Name: {profile['name']}"
+        
+        if profile.get('birthday'):
+            result += f"\n🎂 Birthday: {profile['birthday']}"
+        
+        if profile.get('age'):
+            result += f"\n🔢 Age: {profile['age']}"
+        
+        if profile.get('friends'):
+            result += f"\n👥 Friends: {profile['friends']}"
+        
+        if profile.get('interests'):
+            result += f"\n💡 Interests: {profile['interests']}"
+        
+        if profile.get('important_dates'):
+            result += f"\n📅 Important Dates: {profile['important_dates']}"
+        
+        if profile.get('personal_notes'):
+            result += f"\n📝 Notes: {profile['personal_notes']}"
+        
+        if profile.get('last_updated'):
+            result += f"\n\n🕐 Last updated: {profile['last_updated'][:10]}"
+        
+        return result
+    
     def _handle_memory_commands(self, user_message):
         """Handle memory-related commands"""
         parts = user_message.lower().split()
@@ -439,10 +560,14 @@ Classification:"""
         elif command == "summary":
             return self.get_memory_summary()
         
+        elif command == "profile":
+            return self.get_user_profile_summary()
+        
         else:
             return """🧠 Memory Commands:
 • memory - Show memory summary
 • memory search [query] - Search memories
 • memory add [content] - Add new memory
 • memory delete [id] - Delete memory by ID
-• memory summary - Show detailed summary""" 
+• memory summary - Show detailed summary
+• memory profile - Show your profile information"""

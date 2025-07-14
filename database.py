@@ -49,6 +49,22 @@ class SecondBrainDB:
                 importance INTEGER DEFAULT 1
             )
         ''')
+        
+        # Create user profile table for personal information
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_profile (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                name TEXT,
+                birthday TEXT,
+                age INTEGER,
+                interests TEXT,
+                friends TEXT,
+                important_dates TEXT,
+                personal_notes TEXT,
+                last_updated TEXT
+            )
+        ''')
         # Removed tasks table creation
         conn.commit()
         conn.close()
@@ -146,3 +162,73 @@ class SecondBrainDB:
         conn.commit()
         conn.close()
         return deleted
+    
+    def save_user_profile(self, name=None, birthday=None, age=None, interests=None, friends=None, important_dates=None, personal_notes=None):
+        """Save or update user profile information"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Check if profile exists
+        cursor.execute('SELECT id FROM user_profile ORDER BY timestamp DESC LIMIT 1')
+        existing = cursor.fetchone()
+        
+        if existing:
+            # Update existing profile
+            update_fields = []
+            values = []
+            
+            if name: update_fields.append("name = ?"); values.append(name)
+            if birthday: update_fields.append("birthday = ?"); values.append(birthday)
+            if age: update_fields.append("age = ?"); values.append(age)
+            if interests: update_fields.append("interests = ?"); values.append(interests)
+            if friends: update_fields.append("friends = ?"); values.append(friends)
+            if important_dates: update_fields.append("important_dates = ?"); values.append(important_dates)
+            if personal_notes: update_fields.append("personal_notes = ?"); values.append(personal_notes)
+            
+            if update_fields:
+                update_fields.append("last_updated = ?")
+                values.append(datetime.now().isoformat())
+                values.append(existing[0])
+                
+                cursor.execute(f'''
+                    UPDATE user_profile 
+                    SET {', '.join(update_fields)}
+                    WHERE id = ?
+                ''', values)
+        else:
+            # Create new profile
+            cursor.execute('''
+                INSERT INTO user_profile (timestamp, name, birthday, age, interests, friends, important_dates, personal_notes, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (datetime.now().isoformat(), name, birthday, age, interests, friends, important_dates, personal_notes, datetime.now().isoformat()))
+        
+        conn.commit()
+        conn.close()
+    
+    def get_user_profile(self):
+        """Get the current user profile"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT name, birthday, age, interests, friends, important_dates, personal_notes, last_updated
+            FROM user_profile
+            ORDER BY timestamp DESC
+            LIMIT 1
+        ''')
+        
+        profile = cursor.fetchone()
+        conn.close()
+        
+        if profile:
+            return {
+                'name': profile[0],
+                'birthday': profile[1],
+                'age': profile[2],
+                'interests': profile[3],
+                'friends': profile[4],
+                'important_dates': profile[5],
+                'personal_notes': profile[6],
+                'last_updated': profile[7]
+            }
+        return None

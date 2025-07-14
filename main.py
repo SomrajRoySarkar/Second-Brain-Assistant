@@ -174,32 +174,41 @@ class SecondBrainCLI:
                 with self.console.status("[bold green]Thinking..."):
                     # Use the new AI-powered splitter
                     questions = self.assistant.split_into_questions(user_input)
-
+                    
+                    # Check if we should create a unified response
                     if len(questions) > 1:
-                        all_answers = []
-                        for idx, question in enumerate(questions):
+                        # First, collect responses to check if they should be combined
+                        sample_responses = []
+                        for question in questions[:2]:  # Check first 2 questions to determine style
                             try:
                                 language_style = self.detect_language_style(question)
                                 response = self.assistant.process_message(question, language_style=language_style)
-                                if idx == 0:
-                                    all_answers.append(f"[bold green]Assistant[/bold green]: {response.strip()}")
-                                else:
-                                    all_answers.append(response.strip())
-                            except Exception as e:
-                                self.console.print(f"[red]Error processing message: {str(e)}[/red]")
-                                self.console.print("[yellow]I'm having trouble processing that. Could you try rephrasing?[yellow]")
-                                continue
+                                sample_responses.append(response.strip())
+                            except Exception:
+                                break
                         
-                        combined_response = " ".join(all_answers)
-                        
-                        if len(combined_response) < 80 and '\n' not in combined_response:
-                            self.console.print(combined_response)
+                        # Decide on response style
+                        if self.assistant.should_combine_responses(user_input, sample_responses):
+                            # Create a unified response instead of separate ones
+                            final_response = self.assistant.create_unified_response(user_input, questions)
                         else:
-                            self.console.print("\n\n".join(all_answers))
+                            # Process each question separately for distinct topics
+                            responses = []
+                            for question in questions:
+                                try:
+                                    language_style = self.detect_language_style(question)
+                                    response = self.assistant.process_message(question, language_style=language_style)
+                                    responses.append(response.strip())
+                                except Exception as e:
+                                    self.console.print(f"[red]Error processing message: {str(e)}[/red]")
+                                    continue
+                            final_response = "\n\n".join(responses)
                     else:
-                        # If there's only one question, process it directly
-                        response = self.assistant.process_message(user_input, language_style=self.detect_language_style(user_input))
-                        self.console.print(f"[bold green]Assistant[/bold green]: {response.strip()}")
+                        # Single question - process normally
+                        language_style = self.detect_language_style(user_input)
+                        final_response = self.assistant.process_message(user_input, language_style=language_style)
+                        
+                    self.console.print(f"[bold green]Assistant[/bold green]: {final_response}")
                 
             except KeyboardInterrupt:
                 self.console.print("\n[yellow]Goodbye! Thanks for using your Second Brain! 🧠[/yellow]")
