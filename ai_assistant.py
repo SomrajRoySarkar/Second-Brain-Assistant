@@ -5,7 +5,7 @@ from datetime import datetime
 import json
 import random
 import re
-from google_search import google_search
+from google_search import google_search, advanced_web_search
 import threading
 import dateparser
 import pytz
@@ -19,6 +19,7 @@ class SecondBrainAssistant:
         self.co = cohere.Client(COHERE_API_KEY)
         self.db = SecondBrainDB()
         self.conversation_history = []
+        self.advanced_search_mode = True  # Default to advanced mode
         self.system_prompt = """You are a friendly and helpful assistant. Your main goal is to provide clear, complete answers in a natural, conversational way.\n\n**Core Instructions:**\n1.  **Simple and Clear:** Use easy-to-understand words. Avoid jargon or complex vocabulary.\n2.  **Full Sentences:** Always use grammatically correct, complete sentences. For example, instead of just "Paris," say, "The capital of France is Paris."\n3.  **Friendly Tone:** Be approachable and conversational, like a real person.\n4.  **Be Concise:** Keep your answers brief and to the point (usually 2-3 sentences).\n5.  **Directly Answer:** Always address the user's question directly.\n\n**Example:**\n*   **User:** what's the time and how are you\n*   **Good Response:** "I'm doing well, thanks for asking! The current time is 3:15 PM."\n*   **Bad Response:** "3:15 PM. I am an AI."\n\nYour primary goal is to be helpful, clear, and friendly."""
         self.greeting_responses = [
             "Hi, how are you today?",
@@ -219,17 +220,23 @@ Do not treat each part separately - instead, create one flowing, conversational 
         # Handle /explain command
         if user_message.strip().lower().startswith('/explain'):
             return self.handle_explain_command(user_message)
-        
         # Handle /report command
         if user_message.strip().lower().startswith('/report'):
             return self.handle_report_command(user_message)
-        
+        # Handle memory commands
+        if user_message.lower().startswith('memory'):
+            return self._handle_memory_commands(user_message)
         return self._process_single_message(user_message, language_style=language_style)
 
     def needs_web_search(self, user_message):
-        """Check if a message needs web search: only if it starts with '/search '."""
-        return user_message.strip().lower().startswith('/search ')
-
+        # Always use web search for general queries (not explain, report, memory, or time/date)
+        lowered = user_message.strip().lower()
+        if (lowered.startswith('/explain') or lowered.startswith('/report') or lowered.startswith('memory')):
+            return False
+        # Check for time/date intent
+        if self.is_time_or_date_query(user_message) in ['time', 'date']:
+            return False
+        return True
 
     def is_time_or_date_query(self, user_message):
         """
@@ -264,16 +271,32 @@ Classification:"""
         except Exception:
             return 'none'
 
+    def should_provide_references(self, user_message):
+        """Use LLM to decide if references should be provided for this query."""
+        prompt = (
+            "You are an expert AI assistant. For the following user message, decide if it would be helpful or expected to provide references, sources, or links in the answer. "
+            "Respond with only 'yes' or 'no'.\n\n"
+            f"User Message: {user_message}\n\nClassification:"
+        )
+        try:
+            response = self.co.chat(
+                message=prompt,
+                model="command-r-plus",
+                temperature=0.0,
+                max_tokens=5
+            )
+            result = response.text.strip().lower()
+            return result == 'yes'
+        except Exception:
+            return False
+
     def _process_single_message(self, user_message, language_style='en'):
-        # Remove /forget command logic
         # Check for time/date requests using smart logic
         time_date_intent = self.is_time_or_date_query(user_message)
-
         if time_date_intent == 'time':
             ist = pytz.timezone('Asia/Kolkata')
             now = datetime.now(ist)
             formatted = now.strftime('%I:%M %p (IST)')
-            # 50% chance to add a playful or situational comment
             if random.random() < 0.5:
                 return f"{formatted}"
             else:
@@ -285,12 +308,10 @@ Classification:"""
                     "Hope your day is going well!"
                 ])
                 return f"{formatted} {playful}"
-        
         if time_date_intent == 'date':
             ist = pytz.timezone('Asia/Kolkata')
             now = datetime.now(ist)
             formatted = now.strftime('%A, %B %d, %Y')
-            # 50% chance to add a friendly or situational message
             if random.random() < 0.5:
                 return f"{formatted}"
             else:
@@ -302,47 +323,31 @@ Classification:"""
                     "Have a great one!"
                 ])
                 return f"{formatted}. {friendly}"
-
-
-        # Check for memory-related commands first
-        if user_message.lower().startswith('memory'):
-            return self._handle_memory_commands(user_message)
-
-        # INTENT DETECTION: Should we use web search?
+        # Memory-related commands handled above
+        # INTENT DETECTION: Always use advanced web search for general queries
         needs_search = self.needs_web_search(user_message)
-
         if needs_search:
-            # Remove the '/search ' prefix before searching
-            search_query = user_message.strip()[8:].strip()
-            search_results = google_search(search_query, num_results=3)
-            web_context = ""
-            for i, item in enumerate(search_results):
-                web_context += f"Result {i+1}: {item['title']}\n{item['snippet']}\n{item['link']}\n\n"
-            prompt = (
-                f"Based ONLY on the following web search results, answer the user's question as directly, clearly, and humanly as possible. "
-                f"If the answer is not found, reply: 'Not found in search results.' "
-                f"Do NOT hedge or speculate. Keep your answer natural and easy to understand.\n\n"
-                f"Web Results:\n{web_context}\n"
-                f"User Question: {search_query}\n"
-                f"Direct Answer:"
-            )
-            try:
-                response = self.co.chat(
-                    message=prompt,
-                    model="command-r-plus",
-                    temperature=0.7,
-                    max_tokens=1000
-                )
-                assistant_response = response.text.strip()
-            except Exception as e:
-                assistant_response = f"I'm having trouble processing that right now. Error: {str(e)}"
+            search_query = user_message.strip()
+            search_results = advanced_web_search(search_query, self.co, num_results=5)
+            provide_refs = self.should_provide_references(user_message)
+            if search_results:
+                top = search_results[0]
+                main_answer = top.get('enriched_snippet') or top.get('snippet') or 'No summary available.'
+                if provide_refs:
+                    more_refs = []
+                    for item in search_results:
+                        if item.get('link') and item.get('title'):
+                            more_refs.append(f"- {item['title']}: {item['link']}")
+                    output = f"{main_answer}\n\nReferences:\n" + "\n".join(more_refs)
+                    assistant_response = output
+                else:
+                    assistant_response = main_answer
+            else:
+                assistant_response = "Not found in search results."
         else:
             # Just answer using the model's own knowledge
-            # Determine task type
             task_type = self._classify_task(user_message)
-            # Build context
             context = self.get_context()
-            # Prepare the message with system prompt at the beginning
             full_message = f"Instructions: {self.system_prompt}\n\n"
             if context:
                 full_message += f"Context: {context}\n\n"
@@ -357,14 +362,8 @@ Classification:"""
                 assistant_response = response.text.strip()
             except Exception as e:
                 assistant_response = f"I'm having trouble processing that right now. Error: {str(e)}"
-
-        # Save conversation
         self.db.save_conversation(user_message, assistant_response, None, None)
-        # Extract and save important information
         self._extract_and_save_memory(user_message, assistant_response)
-
-        # Language style handling
-        # Only keep English, remove 'hi' and 'hien' handling
         return assistant_response
     
     def _classify_task(self, message):
