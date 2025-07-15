@@ -17,6 +17,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib import colors
 import textwrap
+from google_search import advanced_web_search
 
 class PDFReportGenerator:
     def __init__(self):
@@ -290,20 +291,15 @@ class PDFReportGenerator:
             return title_text
 
     def get_current_information(self, topic, ai_assistant):
-        """Get current information about the topic using web search"""
+        """Get current information about the topic using advanced web search"""
         try:
-            from google_search import google_search
-            
-            # Perform web search for current information
-            search_results = google_search(topic, num_results=5)
-            
-            if search_results and 'items' in search_results:
+            # Use advanced web search for best results
+            search_results = advanced_web_search(topic, ai_assistant.co, num_results=3)
+            if search_results:
                 search_info = "\n\nCurrent Information from Web Search:\n"
-                for item in search_results['items'][:3]:  # Top 3 results
-                    search_info += f"\n• {item.get('title', 'No title')}"
-                    search_info += f"\n  {item.get('snippet', 'No description')}"
-                    search_info += f"\n  Source: {item.get('link', 'No link')}\n"
-                
+                for item in search_results:
+                    summary = item.get('enriched_snippet') or item.get('snippet') or ''
+                    search_info += f"\n• {item.get('title', 'No title')}\n  {summary}\n  Source: {item.get('link', 'No link')}\n"
                 return search_info
             else:
                 return "\n\nNote: Unable to retrieve current web information at this time."
