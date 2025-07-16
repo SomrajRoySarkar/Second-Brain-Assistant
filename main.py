@@ -70,14 +70,26 @@ class SecondBrainCLI:
             ("memory add <content>", "Add new memory"),
             ("/explain <topic>[; for X marks][; format: ...]", "Get a detailed explanation of a topic, optionally for marks or in a specific format"),
             ("/report <topic>", "Generate a comprehensive PDF report on any topic (with web search)"),
-            ("/report title: ... content: ...", "Generate a custom PDF report with specific title and content"),
-            ("/report title: ... sections: ...", "Generate a report with custom sections (comma-separated)"),
             ("clear", "Clear the screen"),
             ("quit/exit", "Exit the application")
         ]
         
+        # Add examples section
+        help_text.append("\n\n📄 Report Command Examples:\n", style="bold blue")
+        examples = [
+            "/report artificial intelligence",
+            "/report on Gandhi ji and also have a section of their education and achievements",
+            "/report climate change with sections on causes, effects, and solutions",
+            "/report machine learning include background and current applications",
+            "/report about renewable energy covering types and future prospects"
+        ]
+        
         for cmd, desc in commands:
             help_text.append(f"• {cmd:<15} - {desc}\n")
+        
+        # Add examples
+        for example in examples:
+            help_text.append(f"  {example}\n")
         
         help_text.append("\nYou can also just chat naturally with me!")
         

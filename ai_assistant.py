@@ -235,12 +235,45 @@ Do not treat each part separately - instead, create one flowing, conversational 
     def handle_report_command(self, user_message):
         """Handle /report command: parse the request and generate a PDF report."""
         from report_generator import PDFReportGenerator
-        generator = PDFReportGenerator()
-        file_path, title = generator.generate_report(user_message, self)
-        if file_path:
-            return f"Report '{title}' generated successfully. Find it at {file_path}"
-        else:
-            return f"Failed to generate report: {title}"
+        
+        # Extract the actual request after /report
+        request_content = user_message[len('/report'):].strip()
+        
+        # Provide immediate feedback about what we're doing
+        if not request_content:
+            return "Please specify what you'd like the report to be about. Example: /report on artificial intelligence"
+        
+        # Show what we understood from the request
+        try:
+            generator = PDFReportGenerator()
+            
+            # Get a preview of what will be generated
+            preview_prompt = f"""
+            Analyze this report request and provide a brief summary of what the report will contain:
+            
+            Request: "{request_content}"
+            
+            Provide a 2-3 sentence summary of:
+            1. The main topic
+            2. Key sections that would be included
+            3. Type of report (biographical, technical, analysis, etc.)
+            
+            Be concise and informative.
+            """
+            
+            preview_response = self.model.generate_content(preview_prompt)
+            preview_text = preview_response.text if hasattr(preview_response, 'text') else preview_response.candidates[0].content.parts[0].text
+            
+            # Generate the actual report
+            file_path, title = generator.generate_report(user_message, self)
+            
+            if file_path:
+                return f"\n📄 **Report Generated Successfully!**\n\n**Title:** {title}\n\n**Preview:** {preview_text.strip()}\n\n**File Location:** {file_path}\n\n✅ Your report is ready! You can find it in the reports folder."
+            else:
+                return f"❌ Failed to generate report: {title}"
+                
+        except Exception as e:
+            return f"❌ Error generating report: {str(e)}. Please try again with a simpler request."
     
     def process_message(self, user_message, language_style='en'):
         # Handle /search command

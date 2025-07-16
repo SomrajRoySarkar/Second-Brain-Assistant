@@ -1,17 +1,18 @@
 # 🧠 Second Brain Assistant
 
-Second Brain Assistant is your personal AI-powered helper, built with Python and Cohere. It helps you remember important information, search your memories, and have smart, friendly conversations—all from your terminal.
+Second Brain Assistant is your personal AI-powered helper, built with Python and Google Gemini. It helps you remember important information, search your memories, and have smart, friendly conversations—all from your terminal.
 
 ---
 
 ## Features
 
-- **Conversational AI**: Chat naturally with an assistant that understands context and gives clear, concise answers.
+- **Conversational AI**: Chat naturally with an assistant powered by Google Gemini that understands context and gives clear, concise answers.
 - **Memory System**: Important info from your chats is saved and can be searched or recalled later.
 - **Smart Search**: Instantly search your saved memories and conversation history.
-- **Web Search**: Get up-to-date answers using Google Custom Search.
-- **PDF Report Generation**: Create formal, professional PDF reports with custom titles and content.
+- **Advanced Web Search**: Get up-to-date answers using Google Custom Search with AI-powered enrichment.
+- **PDF Report Generation**: Create formal, professional PDF reports with custom sections and content.
 - **Simple, Clean CLI**: Enjoy a colorful, easy-to-read interface powered by the Rich library.
+- **Performance Optimized**: Caching and parallel processing for faster responses.
 
 ---
 
@@ -20,7 +21,7 @@ Second Brain Assistant is your personal AI-powered helper, built with Python and
 ### Prerequisites
 
 - Python 3.7 or higher
-- API keys for Cohere and Google Custom Search
+- API keys for Google Gemini and Google Custom Search
 
 ### Installation
 
@@ -36,7 +37,7 @@ Second Brain Assistant is your personal AI-powered helper, built with Python and
 3. **Set up your environment variables**  
    Create a `.env` file in the project root with your API keys and settings:
    ```ini
-   COHERE_API_KEY=your-cohere-api-key
+   GEMINI_API_KEY=your-gemini-api-key
    GOOGLE_API_KEY=your-google-api-key
    GOOGLE_CSE_ID=your-google-cse-id
    DATABASE_PATH=second_brain.db
@@ -68,13 +69,13 @@ Just type your questions or commands in the terminal. Here are some things you c
 - **Search your memories:**  
   ```
   You: memory search python
-  Assistant: - Python is a high-level programming language...
+  Assistant: 🔍 Search results for 'python': [memory_id] Python is a high-level programming language... (general) ⭐⭐⭐
   ```
 
-- **Search the web with Google:**  
+- **Search the web with advanced search:**  
   ```
   You: /search What is quantum computing?
-  Assistant: [Google search results...]
+  Assistant: [AI-enriched search results with references]
   ```
 
 - **Get a detailed explanation:**  
@@ -89,27 +90,36 @@ Just type your questions or commands in the terminal. Here are some things you c
   Assistant: [Explanation tailored for 5 marks, in bullet points]
   ```
 
-- **Generate a topic-based report (with automatic web search):**  
+- **Generate a comprehensive PDF report:**  
   ```
   You: /report Artificial Intelligence in Healthcare
-  Assistant: Report 'Artificial Intelligence In Healthcare' generated successfully. Find it at ./reports/artificial_intelligence_in_healthcare_20240101_120000.pdf
+  Assistant: 📄 **Report Generated Successfully!**
+  
+  **Title:** Artificial Intelligence in Healthcare Report
+  
+  **Preview:** This report covers the main topic of AI in healthcare, including key sections on current applications, challenges, and future prospects.
+  
+  **File Location:** ./reports/artificial_intelligence_in_healthcare_20240101_120000.pdf
+  
+  ✅ Your report is ready! You can find it in the reports folder.
   ```
 
-- **Generate a formal PDF report with custom title:**  
+- **Generate a report with specific sections:**  
   ```
-  You: /report title: Market Analysis Report content: Create a comprehensive analysis of the current market trends in renewable energy sector
-  Assistant: Report 'Market Analysis Report' generated successfully. Find it at ./reports/market_analysis_report_20240101_120000.pdf
-  ```
-
-- **Generate a report with custom sections:**  
-  ```
-  You: /report title: Project Report sections: Project Overview, Technical Implementation, Results, Future Work
-  Assistant: Report 'Project Report' generated successfully. Find it at ./reports/project_report_20240101_120001.pdf
+  You: /report on Gandhi ji and also have a section of their education and achievements
+  Assistant: [Generates comprehensive report with Introduction, Education, Achievements, and additional relevant sections]
   ```
 
-- **See your recent memories:**  
+- **Memory management:**  
   ```
-  You: memories
+  You: memory
+  Assistant: 🧠 Memory Summary: [Shows your saved memories by category]
+  
+  You: memory add I prefer dark chocolate over milk chocolate
+  Assistant: ✅ Memory saved: I prefer dark chocolate over milk chocolate...
+  
+  You: memory profile
+  Assistant: 👤 Your Profile: [Shows your personal information]
   ```
 
 - **Get help:**  
@@ -124,12 +134,35 @@ Just type your questions or commands in the terminal. Here are some things you c
 
 ---
 
+## Available Commands
+
+- `help` - Show help message
+- `/search <query>` - Search Google for your query
+- `memories` - Show recent memories
+- `memory` - Show memory summary
+- `memory search <query>` - Search memories
+- `memory add <content>` - Add new memory
+- `/explain <topic>[; for X marks][; format: ...]` - Get a detailed explanation
+- `/report <topic>` - Generate a comprehensive PDF report
+- `clear` - Clear the screen
+- `quit/exit` - Exit the application
+
+### Report Command Examples:
+- `/report artificial intelligence`
+- `/report on Gandhi ji and also have a section of their education and achievements`
+- `/report climate change with sections on causes, effects, and solutions`
+- `/report machine learning include background and current applications`
+- `/report about renewable energy covering types and future prospects`
+
+---
+
 ## Project Structure
 
 - `main.py` — The command-line interface and main loop
-- `ai_assistant.py` — Core AI logic and conversation handling
+- `ai_assistant.py` — Core AI logic and conversation handling with Gemini
 - `database.py` — Handles saving and searching conversations and memories (SQLite)
-- `google_search.py` — Integrates Google Custom Search for web results
+- `google_search.py` — Integrates Google Custom Search with AI-powered enrichment
+- `report_generator.py` — Generates professional PDF reports
 - `config.py` — Loads configuration from `.env`
 - `requirements.txt` — All required Python packages
 
@@ -145,12 +178,14 @@ All sensitive info (API keys, database path, etc.) is managed via the `.env` fil
 ## Dependencies
 
 Key libraries used:
-- `cohere` — For AI-powered conversation
+- `google-generativeai` — For AI-powered conversation with Gemini
 - `rich` — For a beautiful terminal interface
 - `googletrans` — For translation features
 - `requests` — For web and API calls
 - `python-dotenv` — For environment variable management
 - `langdetect` — For language detection
+- `reportlab` — For PDF report generation
+- `beautifulsoup4` — For web scraping and content extraction
 
 Install all dependencies with:
 ```bash
@@ -159,11 +194,22 @@ pip install -r requirements.txt
 
 ---
 
+## Performance Features
+
+- **Response Caching**: Frequently asked questions are cached for faster responses
+- **Parallel Processing**: Web searches and memory operations run in parallel
+- **Smart Query Splitting**: Complex questions are intelligently split for better responses
+- **Optimized Search**: Advanced web search with query expansion and result enrichment
+
+---
+
 ## Notes & Tips
 
-- When you ask multiple questions in one message, the assistant will answer them in order, but only the first answer will be prefixed with “Assistant:” for a cleaner look.
-- All your important info and memories are stored in a local SQLite database.
-- You can easily extend the assistant by editing or adding Python files.
+- The assistant uses Google Gemini for all AI interactions, providing high-quality responses
+- All your important info and memories are stored in a local SQLite database
+- PDF reports are automatically saved in the `reports/` folder with timestamps
+- The assistant remembers your preferences and personal information across sessions
+- You can easily extend the assistant by editing or adding Python files
 
 ---
 

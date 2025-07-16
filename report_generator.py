@@ -130,7 +130,7 @@ class PDFReportGenerator:
         story.append(PageBreak())
 
     def parse_report_request(self, user_request, ai_assistant):
-        """Parse the user's report request and extract requirements"""
+        """Parse the user's report request and extract requirements with intelligent understanding"""
         # Remove the /report prefix
         request = user_request[len('/report'):].strip()
         
@@ -143,23 +143,282 @@ class PDFReportGenerator:
             'content': request,
             'topic_only': True,
             'custom_sections': [],
-            'filename': 'report'
+            'filename': 'report',
+            'user_specified_sections': False
         }
         
-        # Always treat the input as a topic-based request for simplicity
-        report_data['content'] = request
+        # Use AI to intelligently parse the user's request
+        parsed_request = self.intelligent_request_parser(request, ai_assistant)
+        
+        # Update report data with parsed information
+        report_data.update(parsed_request)
         
         # Use AI to intelligently summarize the description for a concise topic name
-        report_data['title'] = self.generate_topic_title(request, ai_assistant)
+        report_data['title'] = self.generate_topic_title(parsed_request['content'], ai_assistant)
+        
         # Create a clean filename from title (without "Report" suffix)
         clean_title = report_data['title'].replace(' Report', '').replace(' Analysis', '').replace(' Study', '').replace(' Research', '')
         report_data['filename'] = clean_title.lower().replace(' ', '_').replace('/', '_').replace('\\', '_')
         report_data['filename'] = ''.join(c for c in report_data['filename'] if c.isalnum() or c in ('_', '-'))
         
-        # Use AI to generate intelligent sections based on content type
-        report_data['sections'] = self.generate_intelligent_sections(request, ai_assistant)
+        # Generate sections based on user request - always include additional relevant sections
+        if report_data['user_specified_sections'] and report_data['custom_sections']:
+            # User mentioned specific sections - include them plus other relevant ones
+            report_data['sections'] = self.generate_comprehensive_sections(
+                parsed_request['content'], 
+                report_data['custom_sections'], 
+                ai_assistant
+            )
+        else:
+            # No specific sections mentioned - generate all appropriate sections
+            report_data['sections'] = self.generate_intelligent_sections(parsed_request['content'], ai_assistant)
         
         return report_data
+
+    def intelligent_request_parser(self, request, ai_assistant):
+        """Use AI to intelligently parse the user's report request"""
+        parsing_prompt = f"""
+        You are an expert report request parser. Analyze the following user request and extract the key information for generating a report.
+        
+        User Request: "{request}"
+        
+        Instructions:
+        1. Identify the main topic/subject for the report
+        2. Look for any specific sections the user wants (e.g., "sections on education and achievements", "include a chapter on early life")
+        3. Determine if the user wants a custom format or just a normal report
+        4. Extract any specific requirements or preferences
+        
+        Respond with a JSON object containing:
+        {{
+            "content": "main topic/subject extracted from the request",
+            "custom_sections": ["list of specific sections if mentioned"],
+            "user_specified_sections": true/false,
+            "format_preferences": "any specific format requirements",
+            "special_requirements": "any other special requirements"
+        }}
+        
+        Examples:
+        - "on gandhi ji and also have a section of their education and achievements" -> 
+          {{"content": "Gandhi ji", "custom_sections": ["Introduction", "Education", "Achievements", "Conclusion"], "user_specified_sections": true}}
+        - "artificial intelligence" -> 
+          {{"content": "artificial intelligence", "custom_sections": [], "user_specified_sections": false}}
+        - "create a report on climate change with sections on causes, effects, and solutions" -> 
+          {{"content": "climate change", "custom_sections": ["Introduction", "Causes", "Effects", "Solutions", "Conclusion"], "user_specified_sections": true}}
+        
+        Return only the JSON object, no other text:
+        """
+        
+        try:
+            response = ai_assistant.model.generate_content(parsing_prompt)
+            text = response.text if hasattr(response, 'text') else response.candidates[0].content.parts[0].text
+            
+            # Extract JSON from response
+            import json
+            import re
+            json_match = re.search(r'\{.*\}', text, re.DOTALL)
+            if json_match:
+                parsed_data = json.loads(json_match.group(0))
+                
+                # Ensure all required fields exist
+                default_data = {
+                    'content': request,
+                    'custom_sections': [],
+                    'user_specified_sections': False,
+                    'format_preferences': 'professional',
+                    'special_requirements': ''
+                }
+                
+                # Update with parsed data
+                default_data.update(parsed_data)
+                
+                # If user specified sections, ensure Introduction and Conclusion are included
+                if default_data['user_specified_sections'] and default_data['custom_sections']:
+                    sections = default_data['custom_sections']
+                    if 'Introduction' not in sections:
+                        sections.insert(0, 'Introduction')
+                    if 'Conclusion' not in sections:
+                        sections.append('Conclusion')
+                    default_data['custom_sections'] = sections
+                
+                return default_data
+            else:
+                # Fallback parsing
+                return self.fallback_request_parser(request)
+                
+        except Exception as e:
+            # Fallback to simple parsing
+            return self.fallback_request_parser(request)
+    
+    def fallback_request_parser(self, request):
+        """Simple fallback parser when AI parsing fails"""
+        request_lower = request.lower()
+        
+        # Look for section indicators
+        section_indicators = [
+            'section', 'sections', 'chapter', 'chapters', 'part', 'parts',
+            'include', 'add', 'with', 'about', 'covering', 'on'
+        ]
+        
+        has_sections = any(indicator in request_lower for indicator in section_indicators)
+        
+        # Try to extract mentioned sections
+        custom_sections = []
+        if has_sections:
+            # Look for common section keywords
+            section_keywords = {
+                'education': 'Education',
+                'achievement': 'Achievements',
+                'early life': 'Early Life',
+                'career': 'Career',
+                'personal': 'Personal Life',
+                'legacy': 'Legacy',
+                'background': 'Background',
+                'history': 'History',
+                'current': 'Current State',
+                'future': 'Future Prospects',
+                'analysis': 'Analysis',
+                'impact': 'Impact',
+                'causes': 'Causes',
+                'effects': 'Effects',
+                'solutions': 'Solutions'
+            }
+            
+            for keyword, section_name in section_keywords.items():
+                if keyword in request_lower:
+                    if section_name not in custom_sections:
+                        custom_sections.append(section_name)
+        
+        # If we found custom sections, add Introduction and Conclusion
+        if custom_sections:
+            if 'Introduction' not in custom_sections:
+                custom_sections.insert(0, 'Introduction')
+            if 'Conclusion' not in custom_sections:
+                custom_sections.append('Conclusion')
+        
+        return {
+            'content': request,
+            'custom_sections': custom_sections,
+            'user_specified_sections': len(custom_sections) > 0,
+            'format_preferences': 'professional',
+            'special_requirements': ''
+        }
+
+    def generate_comprehensive_sections(self, topic, user_requested_sections, ai_assistant):
+        """Generate comprehensive sections that include user-requested sections plus additional relevant ones"""
+        comprehensive_prompt = f"""
+        You are an expert report structuring assistant. The user has requested a report on "{topic}" and specifically wants these sections included: {user_requested_sections}.
+        
+        Your task is to create a comprehensive section list that:
+        1. INCLUDES all the user-requested sections: {user_requested_sections}
+        2. ADDS other relevant sections that would make the report complete and professional
+        3. Ensures proper report structure with Introduction first and Conclusion last
+        
+        Instructions:
+        - Always include "Introduction" as the first section
+        - Include ALL user-requested sections: {user_requested_sections}
+        - Add 3-5 additional relevant sections that complement the user's requests
+        - Always include "Conclusion" as the last section
+        - Make the additional sections specific to the topic and relevant to the user's interests
+        - Ensure logical flow between sections
+        - Total sections should be 6-10 for a comprehensive report
+        
+        Topic: "{topic}"
+        User-requested sections: {user_requested_sections}
+        
+        Examples:
+        - If user wants "Education" and "Achievements" for Gandhi, also add "Early Life", "Political Career", "Philosophy", "Legacy"
+        - If user wants "Causes" and "Effects" for climate change, also add "Current State", "Mitigation Strategies", "Future Projections"
+        - If user wants "Background" for AI, also add "Current Applications", "Technical Challenges", "Future Developments", "Ethical Considerations"
+        
+        Respond with ONLY the section headings, one per line, in the order they should appear:
+        """
+        
+        try:
+            response = ai_assistant.model.generate_content(comprehensive_prompt)
+            text = response.text if hasattr(response, 'text') else response.candidates[0].content.parts[0].text
+            
+            # Parse the response to extract section headings
+            sections = []
+            for line in text.strip().split('\n'):
+                section = line.strip()
+                if section and not section.startswith('*') and not section.startswith('-'):
+                    # Clean up any numbering or bullets
+                    section = section.lstrip('0123456789. ').strip()
+                    if section:
+                        sections.append(section)
+            
+            # Ensure we have the user-requested sections
+            final_sections = []
+            
+            # Add Introduction if not present
+            if 'Introduction' not in sections:
+                final_sections.append('Introduction')
+            
+            # Process all sections, ensuring user-requested ones are included
+            for section in sections:
+                if section not in final_sections:
+                    final_sections.append(section)
+            
+            # Ensure all user-requested sections are included
+            for requested_section in user_requested_sections:
+                if requested_section not in final_sections and requested_section not in ['Introduction', 'Conclusion']:
+                    # Insert before conclusion or at the end
+                    if 'Conclusion' in final_sections:
+                        conclusion_index = final_sections.index('Conclusion')
+                        final_sections.insert(conclusion_index, requested_section)
+                    else:
+                        final_sections.append(requested_section)
+            
+            # Add Conclusion if not present
+            if 'Conclusion' not in final_sections:
+                final_sections.append('Conclusion')
+            
+            return final_sections[:10]  # Limit to 10 sections maximum
+            
+        except Exception as e:
+            # Fallback: combine user sections with AI-generated ones
+            return self.fallback_comprehensive_sections(topic, user_requested_sections, ai_assistant)
+    
+    def fallback_comprehensive_sections(self, topic, user_requested_sections, ai_assistant):
+        """Fallback method to generate comprehensive sections when AI fails"""
+        try:
+            # Get AI-generated sections for the topic
+            ai_sections = self.generate_intelligent_sections(topic, ai_assistant)
+            
+            # Combine user-requested with AI-generated sections
+            comprehensive_sections = ['Introduction']
+            
+            # Add user-requested sections first (except Introduction/Conclusion)
+            for section in user_requested_sections:
+                if section not in ['Introduction', 'Conclusion'] and section not in comprehensive_sections:
+                    comprehensive_sections.append(section)
+            
+            # Add AI-generated sections that aren't already included
+            for section in ai_sections:
+                if section not in comprehensive_sections and section not in ['Introduction', 'Conclusion']:
+                    comprehensive_sections.append(section)
+            
+            # Add Conclusion at the end
+            if 'Conclusion' not in comprehensive_sections:
+                comprehensive_sections.append('Conclusion')
+            
+            return comprehensive_sections[:10]  # Limit to 10 sections
+            
+        except Exception as e:
+            # Ultimate fallback: basic structure with user sections
+            basic_sections = ['Introduction']
+            for section in user_requested_sections:
+                if section not in ['Introduction', 'Conclusion']:
+                    basic_sections.append(section)
+            
+            # Add some generic sections
+            generic_additions = ['Background', 'Analysis', 'Current State', 'Future Prospects']
+            for section in generic_additions:
+                if section not in basic_sections and len(basic_sections) < 8:
+                    basic_sections.append(section)
+            
+            basic_sections.append('Conclusion')
+            return basic_sections
 
     def generate_intelligent_sections(self, user_input, ai_assistant):
         """Generate intelligent section headings based on content type and user request"""
@@ -412,15 +671,11 @@ class PDFReportGenerator:
             page_num = 3  # Start from page 3 (after title page and TOC)
             
             for i, section in enumerate(report_data['sections']):
-                # Add section without page number and with alignment dots
-                toc_entry = [
-                    section,
-                    '.' * (80 - len(section))
-                ]
-                toc_data.append(toc_entry)
+                # Add section without page number and without alignment dots
+                toc_data.append([section])
             
-            # Create table with proper styling (only 2 columns now)
-            toc_table = Table(toc_data, colWidths=[4*inch, 1.5*inch])
+            # Create table with proper styling (single column now)
+            toc_table = Table(toc_data, colWidths=[5.5*inch])
             toc_table.setStyle(TableStyle([
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
                 ('FONTNAME', (0, 0), (-1, -1), 'Times-Roman'),
@@ -428,7 +683,6 @@ class PDFReportGenerator:
                 ('LEFTPADDING', (0, 0), (-1, -1), 0),
                 ('RIGHTPADDING', (0, 0), (-1, -1), 0),
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('LINEBELOW', (0, 0), (-1, -1), 0.5, colors.lightgrey),
                 ('SPACEAFTER', (0, 0), (-1, -1), 8),
             ]))
             
