@@ -1,5 +1,4 @@
-import cohere
-from config import COHERE_API_KEY
+import google.generativeai as genai
 from database import SecondBrainDB
 from datetime import datetime
 import json
@@ -12,14 +11,25 @@ import pytz
 from googletrans import Translator
 import os
 from dotenv import load_dotenv
+from functools import lru_cache
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 load_dotenv()
+
+# Gemini API Key and Model
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = "gemini-1.5-flash"
 
 class SecondBrainAssistant:
     def __init__(self):
-        self.co = cohere.Client(COHERE_API_KEY)
+        genai.configure(api_key=GEMINI_API_KEY)
+        self.model = genai.GenerativeModel(GEMINI_MODEL)
         self.db = SecondBrainDB()
         self.conversation_history = []
         self.advanced_search_mode = True  # Default to advanced mode
+        self.executor = ThreadPoolExecutor(max_workers=3)  # For parallel processing
+        self._response_cache = {}  # Simple response cache
+        self._cache_lock = threading.Lock()
         self.system_prompt = """You are a friendly and helpful assistant. Your main goal is to provide clear, complete answers in a natural, conversational way.\n\n**Core Instructions:**\n1.  **Simple and Clear:** Use easy-to-understand words. Avoid jargon or complex vocabulary.\n2.  **Full Sentences:** Always use grammatically correct, complete sentences. For example, instead of just "Paris," say, "The capital of France is Paris."\n3.  **Friendly Tone:** Be approachable and conversational, like a real person.\n4.  **Be Concise:** Keep your answers brief and to the point (usually 2-3 sentences).\n5.  **Directly Answer:** Always address the user's question directly.\n\n**Example:**\n*   **User:** what's the time and how are you\n*   **Good Response:** "I'm doing well, thanks for asking! The current time is 3:15 PM."\n*   **Bad Response:** "3:15 PM. I am an AI."\n\nYour primary goal is to be helpful, clear, and friendly."""
         self.greeting_responses = [
             "Hi, how are you today?",
@@ -35,6 +45,28 @@ class SecondBrainAssistant:
         ]
         self.last_greeting = None
     
+    def _get_cache_key(self, message, context=""):
+        """Generate a cache key for responses"""
+        return hash((message.lower().strip(), context))
+    
+    def _get_cached_response(self, message, context=""):
+        """Get cached response if available"""
+        cache_key = self._get_cache_key(message, context)
+        with self._cache_lock:
+            return self._response_cache.get(cache_key)
+    
+    def _cache_response(self, message, context, response):
+        """Cache a response"""
+        cache_key = self._get_cache_key(message, context)
+        with self._cache_lock:
+            # Simple cache with max size of 100 entries
+            if len(self._response_cache) >= 100:
+                # Remove oldest entry
+                oldest_key = next(iter(self._response_cache))
+                del self._response_cache[oldest_key]
+            self._response_cache[cache_key] = response
+    
+    @lru_cache(maxsize=50)
     def get_context(self):
         """Build enriched context from user profile, recent interactions and key memories"""
         context_parts = []
@@ -73,9 +105,16 @@ class SecondBrainAssistant:
         """
         Uses the language model to split a user's message into distinct questions or statements.
         """
+        # Check cache first
+        cached = self._get_cached_response(f"split:{user_message}")
+        if cached:
+            return cached
+        
         # A simple heuristic to avoid an API call for very simple inputs
         if len(user_message.split()) < 7 and ' and ' not in user_message and '?' not in user_message[1:]:
-            return [user_message]
+            result = [user_message]
+            self._cache_response(f"split:{user_message}", "", result)
+            return result
 
         prompt = f"""You are a text-processing utility. Your task is to analyze the following user message and split it into individual, self-contained questions or statements.
 Return the output as a single, raw JSON-formatted list of strings. Do not include any other text or formatting.
@@ -90,25 +129,21 @@ User Message:
 JSON Output:
 """
         try:
-            response = self.co.chat(
-                message=prompt,
-                model="command-r-plus",
-                temperature=0.0,
-            )
-            
-            # Find and parse the JSON list from the response text
-            json_str_match = re.search(r'\[.*\]', response.text, re.DOTALL)
+            response = self.model.generate_content(prompt)
+            text = response.text if hasattr(response, 'text') else response.candidates[0].content.parts[0].text
+            json_str_match = re.search(r'\[.*\]', text, re.DOTALL)
             if json_str_match:
-                # The raw string from the model might have escaped characters that need to be handled
                 parsed_json = json.loads(json_str_match.group(0))
                 if isinstance(parsed_json, list) and all(isinstance(q, str) for q in parsed_json):
+                    self._cache_response(f"split:{user_message}", "", parsed_json)
                     return parsed_json
-            
-            # Fallback if parsing fails or no JSON is found
-            return [user_message]
+            result = [user_message]
+            self._cache_response(f"split:{user_message}", "", result)
+            return result
         except Exception:
-            # If the API call or JSON parsing fails, return the original message as a single question.
-            return [user_message]
+            result = [user_message]
+            self._cache_response(f"split:{user_message}", "", result)
+            return result
     
     def should_combine_responses(self, user_message, responses):
         """
@@ -155,15 +190,10 @@ Please provide a single, cohesive response that addresses all parts of the user'
 Do not treat each part separately - instead, create one flowing, conversational response that feels human and natural."""
         
         try:
-            response = self.co.chat(
-                message=unified_prompt,
-                model="command-r-plus",
-                temperature=0.7,
-                max_tokens=1000
-            )
-            return response.text.strip()
+            response = self.model.generate_content(unified_prompt)
+            text = response.text if hasattr(response, 'text') else response.candidates[0].content.parts[0].text
+            return text.strip()
         except Exception as e:
-            # Fallback to processing the first question if unified response fails
             return self.process_message(questions[0]) if questions else f"I'm having trouble processing that right now. Error: {str(e)}"
     
     def handle_explain_command(self, user_message):
@@ -196,13 +226,9 @@ Do not treat each part separately - instead, create one flowing, conversational 
             prompt += "Use a standard, well-structured format with headings, bullet points, and examples if relevant. "
         prompt += "Do not add unnecessary filler or repetition. Be as smart and concise as possible, but cover all key points in detail."
         try:
-            response = self.co.chat(
-                message=prompt,
-                model="command-r-plus",
-                temperature=0.7,
-                max_tokens=1000
-            )
-            return response.text.strip()
+            response = self.model.generate_content(prompt)
+            text = response.text if hasattr(response, 'text') else response.candidates[0].content.parts[0].text
+            return text.strip()
         except Exception as e:
             return f"I'm having trouble generating the explanation right now. Error: {str(e)}"
 
@@ -217,6 +243,28 @@ Do not treat each part separately - instead, create one flowing, conversational 
             return f"Failed to generate report: {title}"
     
     def process_message(self, user_message, language_style='en'):
+        # Handle /search command
+        if user_message.strip().lower().startswith('/search'):
+            query = user_message[len('/search'):].strip()
+            if not query:
+                return "Please provide a search query after /search."
+            search_results = advanced_web_search(query, self.model, num_results=5)
+            provide_refs = self.should_provide_references(query)
+            if search_results:
+                top = search_results[0]
+                main_answer = top.get('enriched_snippet') or top.get('snippet') or 'No summary available.'
+                if provide_refs:
+                    more_refs = []
+                    for item in search_results:
+                        if item.get('link') and item.get('title'):
+                            more_refs.append(f"- {item['title']}: {item['link']}")
+                    output = f"{main_answer}\n\nReferences:\n" + "\n".join(more_refs)
+                    assistant_response = output
+                else:
+                    assistant_response = main_answer
+            else:
+                assistant_response = "Not found in search results."
+            return assistant_response
         # Handle /explain command
         if user_message.strip().lower().startswith('/explain'):
             return self.handle_explain_command(user_message)
@@ -226,7 +274,8 @@ Do not treat each part separately - instead, create one flowing, conversational 
         # Handle memory commands
         if user_message.lower().startswith('memory'):
             return self._handle_memory_commands(user_message)
-        return self._process_single_message(user_message, language_style=language_style)
+        # All other messages: always use conversation mode, never web search
+        return self._process_conversation_message(user_message, language_style=language_style)
 
     def needs_web_search(self, user_message):
         # Always use web search for general queries (not explain, report, memory, or time/date)
@@ -257,13 +306,9 @@ User Message:
 Classification:"""
 
         try:
-            response = self.co.chat(
-                message=prompt,
-                model="command-r-plus",
-                temperature=0.0,
-                max_tokens=5
-            )
-            result = response.text.strip().lower()
+            response = self.model.generate_content(prompt)
+            text = response.text if hasattr(response, 'text') else response.candidates[0].content.parts[0].text
+            result = text.strip().lower()
             if result in ['time', 'date']:
                 return result
             else:
@@ -279,92 +324,46 @@ Classification:"""
             f"User Message: {user_message}\n\nClassification:"
         )
         try:
-            response = self.co.chat(
-                message=prompt,
-                model="command-r-plus",
-                temperature=0.0,
-                max_tokens=5
-            )
-            result = response.text.strip().lower()
+            response = self.model.generate_content(prompt)
+            text = response.text if hasattr(response, 'text') else response.candidates[0].content.parts[0].text
+            result = text.strip().lower()
             return result == 'yes'
         except Exception:
             return False
 
-    def _process_single_message(self, user_message, language_style='en'):
-        # Check for time/date requests using smart logic
-        time_date_intent = self.is_time_or_date_query(user_message)
-        if time_date_intent == 'time':
-            ist = pytz.timezone('Asia/Kolkata')
-            now = datetime.now(ist)
-            formatted = now.strftime('%I:%M %p (IST)')
-            if random.random() < 0.5:
-                return f"{formatted}"
-            else:
-                playful = random.choice([
-                    "It's chai time!",
-                    "Time flies, doesn't it?",
-                    "Perfect time for a quick break!",
-                    "Tick-tock!",
-                    "Hope your day is going well!"
-                ])
-                return f"{formatted} {playful}"
-        if time_date_intent == 'date':
-            ist = pytz.timezone('Asia/Kolkata')
-            now = datetime.now(ist)
-            formatted = now.strftime('%A, %B %d, %Y')
-            if random.random() < 0.5:
-                return f"{formatted}"
-            else:
-                friendly = random.choice([
-                    "Hope your week is off to a good start!",
-                    "Enjoy your day!",
-                    "Wishing you a productive week!",
-                    "Make today count!",
-                    "Have a great one!"
-                ])
-                return f"{formatted}. {friendly}"
-        # Memory-related commands handled above
-        # INTENT DETECTION: Always use advanced web search for general queries
-        needs_search = self.needs_web_search(user_message)
-        if needs_search:
-            search_query = user_message.strip()
-            search_results = advanced_web_search(search_query, self.co, num_results=5)
-            provide_refs = self.should_provide_references(user_message)
-            if search_results:
-                top = search_results[0]
-                main_answer = top.get('enriched_snippet') or top.get('snippet') or 'No summary available.'
-                if provide_refs:
-                    more_refs = []
-                    for item in search_results:
-                        if item.get('link') and item.get('title'):
-                            more_refs.append(f"- {item['title']}: {item['link']}")
-                    output = f"{main_answer}\n\nReferences:\n" + "\n".join(more_refs)
-                    assistant_response = output
-                else:
-                    assistant_response = main_answer
-            else:
-                assistant_response = "Not found in search results."
-        else:
-            # Just answer using the model's own knowledge
-            task_type = self._classify_task(user_message)
-            context = self.get_context()
-            full_message = f"Instructions: {self.system_prompt}\n\n"
-            if context:
-                full_message += f"Context: {context}\n\n"
-            full_message += f"User: {user_message}"
-            try:
-                response = self.co.chat(
-                    message=full_message,
-                    model="command-r-plus",
-                    temperature=0.7,
-                    max_tokens=1000
-                )
-                assistant_response = response.text.strip()
-            except Exception as e:
-                assistant_response = f"I'm having trouble processing that right now. Error: {str(e)}"
+    def _process_conversation_message(self, user_message, language_style='en'):
+        # Check cache first
+        context = self.get_context()
+        cached_response = self._get_cached_response(user_message, context)
+        if cached_response:
+            return cached_response
+        
+        # Just answer using the model's own knowledge (never web search)
+        task_type = self._classify_task(user_message)
+        full_message = f"Instructions: {self.system_prompt}\n\n"
+        if context:
+            full_message += f"Context: {context}\n\n"
+        full_message += f"User: {user_message}"
+        
+        try:
+            response = self.model.generate_content(full_message)
+            text = response.text if hasattr(response, 'text') else response.candidates[0].content.parts[0].text
+            assistant_response = text.strip()
+        except Exception as e:
+            assistant_response = f"I'm having trouble processing that right now. Error: {str(e)}"
+        
+        # Cache the response
+        self._cache_response(user_message, context, assistant_response)
+        
+        # Save to database and extract memory asynchronously
+        self.executor.submit(self._save_conversation_async, user_message, assistant_response)
+        
+        return assistant_response
+    
+    def _save_conversation_async(self, user_message, assistant_response):
+        """Save conversation and extract memory asynchronously"""
         self.db.save_conversation(user_message, assistant_response, None, None)
         self._extract_and_save_memory(user_message, assistant_response)
-        return assistant_response
     
     def _classify_task(self, message):
         """Classify the type of task based on user message"""

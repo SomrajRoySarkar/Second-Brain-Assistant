@@ -185,16 +185,12 @@ class PDFReportGenerator:
         """
         
         try:
-            response = ai_assistant.co.chat(
-                message=sections_prompt,
-                model="command-r-plus",
-                temperature=0.4,
-                max_tokens=200
-            )
+            response = ai_assistant.model.generate_content(sections_prompt)
             
             # Parse the response to extract section headings
+            text = response.text if hasattr(response, 'text') else response.candidates[0].content.parts[0].text
             sections = []
-            for line in response.text.strip().split('\n'):
+            for line in text.strip().split('\n'):
                 section = line.strip()
                 if section and not section.startswith('*') and not section.startswith('-'):
                     # Clean up any numbering or bullets
@@ -269,13 +265,9 @@ class PDFReportGenerator:
         """
         
         try:
-            response = ai_assistant.co.chat(
-                message=title_prompt,
-                model="command-r-plus",
-                temperature=0.3,
-                max_tokens=50
-            )
-            title = response.text.strip()
+            response = ai_assistant.model.generate_content(title_prompt)
+            title = response.text if hasattr(response, 'text') else response.candidates[0].content.parts[0].text
+            title = title.strip()
             
             # Add "Report" suffix if not already present
             if not any(word in title.lower() for word in ['report', 'analysis', 'study', 'research']):
@@ -294,7 +286,7 @@ class PDFReportGenerator:
         """Get current information about the topic using advanced web search"""
         try:
             # Use advanced web search for best results
-            search_results = advanced_web_search(topic, ai_assistant.co, num_results=3)
+            search_results = advanced_web_search(topic, ai_assistant.model, num_results=3)
             if search_results:
                 search_info = "\n\nCurrent Information from Web Search:\n"
                 for item in search_results:
@@ -351,13 +343,9 @@ class PDFReportGenerator:
         """
         
         try:
-            response = ai_assistant.co.chat(
-                message=content_prompt,
-                model="command-r-plus",
-                temperature=0.7,
-                max_tokens=2500  # Increased for more comprehensive content
-            )
-            return response.text.strip()
+            response = ai_assistant.model.generate_content(content_prompt)
+            text = response.text if hasattr(response, 'text') else response.candidates[0].content.parts[0].text
+            return text.strip()
         except Exception as e:
             return f"Error generating report content: {str(e)}"
 
@@ -384,13 +372,9 @@ class PDFReportGenerator:
             """
             
             try:
-                response = ai_assistant.co.chat(
-                    message=section_prompt,
-                    model="command-r-plus",
-                    temperature=0.7,
-                    max_tokens=800
-                )
-                section_contents[section_name] = response.text.strip()
+                response = ai_assistant.model.generate_content(section_prompt)
+                text = response.text if hasattr(response, 'text') else response.candidates[0].content.parts[0].text
+                section_contents[section_name] = text.strip()
             except Exception as e:
                 section_contents[section_name] = f"Error generating content for {section_name}: {str(e)}"
         

@@ -4,14 +4,22 @@ from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 import time
 import re
+from functools import lru_cache
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 load_dotenv()
 
 API_KEY = os.getenv('GOOGLE_API_KEY')
 CSE_ID = os.getenv('GOOGLE_CSE_ID')
 
+# Cache for search results
+_search_cache = {}
+_cache_lock = threading.Lock()
+
 # Existing simple search
 
+@lru_cache(maxsize=100)
 def google_search(query, num_results=3):
     url = "https://www.googleapis.com/customsearch/v1"
     params = {
@@ -36,33 +44,48 @@ def google_search(query, num_results=3):
 
 # Advanced web search for best results
 
-def advanced_web_search(query, cohere_client, num_results=5, snippet_enrich=True, query_expansion=True, sleep_between=1):
+def advanced_web_search(query, gemini_model, num_results=5, snippet_enrich=True, query_expansion=True, sleep_between=0.5):
     """
-    Advanced web search: query expansion, multi-query, deduplication, ranking, snippet enrichment.
-    Returns a list of dicts: {title, snippet, link, [enriched_snippet]}
-    Requires a Cohere client for LLM tasks.
+    Advanced web search with LLM-powered snippet enrichment and query expansion.
+    Requires a Gemini model for LLM tasks.
     """
+    # Check cache first
+    cache_key = f"{query}:{num_results}:{snippet_enrich}:{query_expansion}"
+    with _cache_lock:
+        if cache_key in _search_cache:
+            return _search_cache[cache_key]
+    
     all_results = []
     queries = [query]
-    # 1. Query Expansion
-    if query_expansion:
-        prompt = f"""
-        Expand the following search query into 2-3 alternative queries that might yield more relevant or diverse web results. Return as a JSON list of strings.\n\nQuery: {query}\n\nJSON Output:
-        """
+    
+    # 1. Query Expansion (reduced for speed)
+    if query_expansion and len(query.split()) > 3:  # Only expand complex queries
+        prompt = f"""Expand this search query into 1-2 alternative queries. Return as JSON list: "{query}"""
         try:
-            resp = cohere_client.chat(message=prompt, model="command-r-plus", temperature=0.4, max_tokens=100)
-            match = re.search(r'\[.*\]', resp.text, re.DOTALL)
+            resp = gemini_model.generate_content(prompt)
+            expanded = resp.text if hasattr(resp, 'text') else resp.candidates[0].content.parts[0].text
+            expanded = expanded.strip()
+            match = re.search(r'\[.*\]', expanded, re.DOTALL)
             if match:
-                expansions = eval(match.group(0))
-                if isinstance(expansions, list):
-                    queries.extend([q for q in expansions if isinstance(q, str)])
+                try:
+                    import json
+                    expansions = json.loads(match.group(0))
+                    if isinstance(expansions, list):
+                        queries.extend([q for q in expansions[:1] if isinstance(q, str)])  # Limit to 1 expansion
+                except json.JSONDecodeError:
+                    pass
         except Exception:
             pass
-    # 2. Multi-query search
-    for q in queries:
-        results = google_search(q, num_results=num_results)
-        all_results.extend(results)
-        time.sleep(sleep_between)  # avoid rate limits
+    
+    # 2. Parallel multi-query search
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        future_to_query = {executor.submit(google_search, q, num_results): q for q in queries[:2]}  # Limit queries
+        for future in as_completed(future_to_query):
+            try:
+                results = future.result(timeout=5)  # 5 second timeout
+                all_results.extend(results)
+            except Exception:
+                pass
     # 3. Deduplication (by link and title)
     seen = set()
     deduped = []
@@ -94,8 +117,12 @@ def advanced_web_search(query, cohere_client, num_results=5, snippet_enrich=True
                 page_text = ' '.join(list(texts)[:500])  # limit for speed
                 # Summarize with LLM
                 prompt = f"Summarize the following web page content in 2-3 sentences, focusing on the main facts and insights.\n\nContent:\n{page_text}\n\nSummary:"
-                summary = cohere_client.chat(message=prompt, model="command-r-plus", temperature=0.3, max_tokens=120).text.strip()
+                resp = gemini_model.generate_content(prompt)
+                summary = resp.text if hasattr(resp, 'text') else resp.candidates[0].content.parts[0].text
+                summary = summary.strip()
                 item['enriched_snippet'] = summary
             except Exception:
                 item['enriched_snippet'] = None
-    return deduped[:num_results] 
+    with _cache_lock:
+        _search_cache[cache_key] = deduped[:num_results]
+    return deduped[:num_results]

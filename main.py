@@ -38,7 +38,7 @@ class SecondBrainCLI:
         welcome_text = Text()
         welcome_text.append("🧠 ", style="bold blue")
         welcome_text.append("Welcome to your Second Brain!", style="bold white")
-        welcome_text.append("\n\nI'm your AI assistant powered by Cohere. I can help you with:")
+        welcome_text.append("\n\nI'm your AI assistant powered by Gemini. I can help you with:")
         
         features = [
             "🔍 Searching through your memories",
@@ -89,28 +89,8 @@ class SecondBrainCLI:
     def handle_search(self, command):
         """Handle /search command for Google search only"""
         if command.startswith("/search "):
-            query = command[len("/search "):].strip()
             result = self.assistant.process_message(command)
             self.console.print(result)
-            return True
-        elif command == "memories":
-            memories = self.assistant.db.get_memories(limit=10)
-            if not memories:
-                self.console.print("No memories found.")
-                return True
-            table = Table(title="Recent Memories")
-            table.add_column("Content", style="cyan")
-            table.add_column("Category", style="magenta")
-            table.add_column("Importance", style="yellow")
-            table.add_column("Date", style="green")
-            for memory in memories:
-                table.add_row(
-                    memory[1][:50] + "..." if len(memory[1]) > 50 else memory[1],  # memory[1] is content
-                    memory[2],  # memory[2] is category
-                    str(memory[3]),  # memory[3] is importance
-                    memory[4][:10]  # memory[4] is timestamp, just the date part
-                )
-            self.console.print(table)
             return True
         return False
     
@@ -172,41 +152,37 @@ class SecondBrainCLI:
                 # Do not print the user's command
 
                 with self.console.status("[bold green]Thinking..."):
-                    # Use the new AI-powered splitter
-                    questions = self.assistant.split_into_questions(user_input)
-                    
-                    # Check if we should create a unified response
-                    if len(questions) > 1:
-                        # First, collect responses to check if they should be combined
-                        sample_responses = []
-                        for question in questions[:2]:  # Check first 2 questions to determine style
-                            try:
-                                language_style = self.detect_language_style(question)
-                                response = self.assistant.process_message(question, language_style=language_style)
-                                sample_responses.append(response.strip())
-                            except Exception:
-                                break
-                        
-                        # Decide on response style
-                        if self.assistant.should_combine_responses(user_input, sample_responses):
-                            # Create a unified response instead of separate ones
-                            final_response = self.assistant.create_unified_response(user_input, questions)
-                        else:
-                            # Process each question separately for distinct topics
-                            responses = []
-                            for question in questions:
-                                try:
-                                    language_style = self.detect_language_style(question)
-                                    response = self.assistant.process_message(question, language_style=language_style)
-                                    responses.append(response.strip())
-                                except Exception as e:
-                                    self.console.print(f"[red]Error processing message: {str(e)}[/red]")
-                                    continue
-                            final_response = "\n\n".join(responses)
-                    else:
-                        # Single question - process normally
+                    # Optimized processing - skip complex splitting for simple queries
+                    if len(user_input.split()) <= 10 and ' and ' not in user_input.lower():
+                        # Simple query - process directly
                         language_style = self.detect_language_style(user_input)
                         final_response = self.assistant.process_message(user_input, language_style=language_style)
+                    else:
+                        # Complex query - use AI-powered splitter
+                        questions = self.assistant.split_into_questions(user_input)
+                        
+                        # Check if we should create a unified response
+                        if len(questions) > 1:
+                            # Simplified decision making - combine if similar length
+                            if len(questions) <= 2 and len(user_input) < 150:
+                                # Create a unified response instead of separate ones
+                                final_response = self.assistant.create_unified_response(user_input, questions)
+                            else:
+                                # Process each question separately for distinct topics
+                                responses = []
+                                for question in questions:
+                                    try:
+                                        language_style = self.detect_language_style(question)
+                                        response = self.assistant.process_message(question, language_style=language_style)
+                                        responses.append(response.strip())
+                                    except Exception as e:
+                                        self.console.print(f"[red]Error processing message: {str(e)}[/red]")
+                                        continue
+                                final_response = "\n\n".join(responses)
+                        else:
+                            # Single question - process normally
+                            language_style = self.detect_language_style(user_input)
+                            final_response = self.assistant.process_message(user_input, language_style=language_style)
                         
                     self.console.print(f"[bold green]Assistant[/bold green]: {final_response}")
                 
